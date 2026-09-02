@@ -1,0 +1,90 @@
+name: Vendor archived Oswald v49
+
+on:
+  push:
+    branches:
+      - react-v2
+    paths:
+      - .github/workflows/vendor-oswald.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout React V2
+        uses: actions/checkout@v6
+        with:
+          ref: react-v2
+
+      - name: Download exact archived Oswald v49 WOFF2 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='assets/fonts/oswald'
+          mkdir -p "$target"
+          base='https://fonts.gstatic.com/s/oswald/v49'
+          files=(
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUtiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUJiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUliZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUhiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUZiZQ.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUtiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUJiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUliZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUhiZTaR.woff2'
+            'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUZiZQ.woff2'
+          )
+
+          for file in "${files[@]}"; do
+            curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+              "$base/$file" -o "$target/$file"
+          done
+
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('assets/fonts/oswald')
+          fonts = sorted(root.glob('*.woff2'))
+          if len(fonts) != 10:
+              raise SystemExit(f'Expected 10 WOFF2 files, found {len(fonts)}')
+          for font in fonts:
+              data = font.read_bytes()
+              if len(data) < 1000 or data[:4] != b'wOF2':
+                  raise SystemExit(f'Invalid WOFF2: {font} ({len(data)} bytes)')
+          print(f'Validated {len(fonts)} Oswald v49 WOFF2 files')
+          PY
+
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            'https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt' \
+            -o "$target/OFL.txt"
+
+          cat > "$target/README.md" <<'EOF'
+          # Oswald v49 webfonts
+
+          These WOFF2 files are the exact Google Fonts Oswald v49 assets referenced by the archived Wfolio version of pavelkayler.com.
+
+          Source base URL: `https://fonts.gstatic.com/s/oswald/v49/`
+
+          They are vendored so the production site and future builds do not depend on Google Fonts at runtime or build time. Oswald is distributed under the SIL Open Font License 1.1; see `OFL.txt`.
+          EOF
+
+          sha256sum "$target"/*.woff2 | sort
+
+      - name: Commit vendored fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/fonts/oswald
+          if git diff --cached --quiet; then
+            echo 'Oswald v49 files already vendored'
+            exit 0
+          fi
+          git commit -m 'Vendor archived Oswald v49 webfonts'
+          git push origin HEAD:react-v2
