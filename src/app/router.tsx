@@ -3,6 +3,7 @@ import { MainLayout } from '../layouts/MainLayout'
 import { LegacyPage } from '../components/LegacyPage'
 import { WorksPage } from '../pages/WorksPage'
 import { ContactsPage } from '../pages/ContactsPage'
+import { GalleryPage } from '../pages/GalleryPage'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 
@@ -13,9 +14,9 @@ export const router = createBrowserRouter(
       children: [
         { index: true, element: <LegacyPage pageKey="home" /> },
         { path: 'works', element: <WorksPage /> },
-        { path: 'portraits', element: <LegacyPage pageKey="portraits" /> },
-        { path: 'projects', element: <LegacyPage pageKey="projects" /> },
-        { path: 'brands', element: <LegacyPage pageKey="brands" /> },
+        { path: 'portraits', element: <GalleryPage pageKey="portraits" /> },
+        { path: 'projects', element: <GalleryPage pageKey="projects" /> },
+        { path: 'brands', element: <GalleryPage pageKey="brands" /> },
         { path: 'contacts', element: <ContactsPage /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
