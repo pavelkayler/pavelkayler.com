@@ -74,6 +74,26 @@ export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
     root.addEventListener('focusin', onPrefetch)
     root.addEventListener('pointerdown', onPrefetch)
 
+    // Keep the original Wfolio colour/aspect placeholders visible immediately and only
+    // fade the real bitmap in after the browser has decoded it. This removes the blank
+    // flash that made first-time route changes feel blocked by image loading.
+    root.querySelectorAll<HTMLImageElement>('.lazy-image img').forEach((image) => {
+      const container = image.closest<HTMLElement>('.lazy-image')
+      if (!container) return
+
+      const reveal = () => {
+        const markLoaded = () => container.classList.add('is-loaded')
+        if (typeof image.decode === 'function') image.decode().catch(() => undefined).finally(markLoaded)
+        else markLoaded()
+      }
+
+      if (image.complete && image.naturalWidth > 0) reveal()
+      else {
+        image.addEventListener('load', reveal, { once: true })
+        image.addEventListener('error', () => container.classList.add('is-loaded'), { once: true })
+      }
+    })
+
     const lightboxes: PhotoSwipeLightbox[] = []
     root.querySelectorAll<HTMLElement>('.js-gallery').forEach((gallery) => {
       const lightbox = new PhotoSwipeLightbox({
