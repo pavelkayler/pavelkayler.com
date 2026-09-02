@@ -1,0 +1,7 @@
+@import url('/wfolio/pavelkayler.ru/assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css');
+
+/* Migration overrides: keep the original Polina look while removing Wfolio-only UI. */
+.branding,
+.admin-link {
+  display: none !important;
+}
