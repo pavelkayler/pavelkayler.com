@@ -41,10 +41,14 @@ body {
   max-width: 209px !important;
 }
 
-/* Keep the old logo slots in the route DOM as invisible spacers. They preserve
-   the exact HOME/WORKS/CONTACTS/album geometry while only the persistent logo is
-   painted. visibility:hidden also removes duplicate links from hit-testing. */
-.native-react-page .logo {
+/* The original page-local logo occupied 209x35 px and contributed its margins to
+   the route layout. Keep an empty box with the same geometry so content below it
+   stays exactly where Polina placed it, while only the persistent logo is painted. */
+.route-logo-spacer {
+  width: 209px;
+  height: 35px;
+  margin-right: auto;
+  margin-left: auto;
   visibility: hidden;
 }
 
