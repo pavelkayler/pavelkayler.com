@@ -9,18 +9,12 @@ const SOURCE = path.join(ROOT, 'legacy-source')
 const OUT = path.join(ROOT, 'src', 'generated', 'structured.ts')
 
 const routeMap = new Map([
-  ['index.html', '/'],
-  ['./index.html', '/'],
-  ['works.html', '/works'],
-  ['./works.html', '/works'],
-  ['portraits.html', '/portraits'],
-  ['./portraits.html', '/portraits'],
-  ['projects.html', '/projects'],
-  ['./projects.html', '/projects'],
-  ['brands.html', '/brands'],
-  ['./brands.html', '/brands'],
-  ['contacts.html', '/contacts'],
-  ['./contacts.html', '/contacts'],
+  ['index.html', '/'], ['./index.html', '/'],
+  ['works.html', '/works'], ['./works.html', '/works'],
+  ['portraits.html', '/portraits'], ['./portraits.html', '/portraits'],
+  ['projects.html', '/projects'], ['./projects.html', '/projects'],
+  ['brands.html', '/brands'], ['./brands.html', '/brands'],
+  ['contacts.html', '/contacts'], ['./contacts.html', '/contacts'],
 ])
 
 function cleanText(value = '') {
@@ -135,6 +129,62 @@ async function parseAlbum(file, key) {
   }
 }
 
+async function parseHome() {
+  const html = await readFile(path.join(SOURCE, 'index.html'), 'utf8')
+  const $ = load(html, { decodeEntities: false })
+  const cover = $('.cover').first()
+  const main = $('main.page-main').first()
+
+  const slides = cover.find('.slider .slide .lazy-image').map((_, element) => imageData($, $(element))).get()
+
+  const pictureRows = main.find('.sections-container').map((_, element) => {
+    const container = $(element)
+    const pictureSections = container.find('.picture-section')
+    if (!pictureSections.length) return null
+
+    const columns = container.find('.row').first().children().map((_, columnElement) => {
+      const column = $(columnElement)
+      const section = column.find('.picture-section').first()
+      if (!section.length) return null
+      return {
+        columnClass: column.attr('class') || 'col-sm-12',
+        sectionClass: section.attr('class') || 'section-container picture-section -default',
+        image: imageData($, section.find('.lazy-image').first()),
+      }
+    }).get().filter(Boolean)
+
+    return {
+      containerClass: container.attr('class') || 'sections-container -medium-width',
+      columns,
+    }
+  }).get().filter(Boolean)
+
+  const actions = main.find('.action-section a.button').map((_, element) => {
+    const link = $(element)
+    let href = link.attr('href') || '#'
+    if (href === 'https://t.me/pavekayler') href = 'https://t.me/pavelkayler'
+    return {
+      columnClass: link.closest('[class*="col-"]').attr('class') || 'col-sm-12',
+      href,
+      label: cleanText(link.text()),
+      iconClass: link.find('i').attr('class') || '',
+    }
+  }).get()
+
+  return {
+    cover: {
+      title: cleanText(cover.find('.cover-content h1').text()),
+      subtitle: cleanText(cover.find('.cover-content p').text()),
+      delay: Number(cover.find('.slider').attr('data-delay') || 4000),
+      slides,
+    },
+    pictureRows,
+    works: listingCards($, main.find('.inline-listing-section .listing').first()),
+    actions,
+    quote: main.find('.background-accent blockquote p').map((_, element) => cleanText($(element).text())).get(),
+  }
+}
+
 const worksHtml = await readFile(path.join(SOURCE, 'works.html'), 'utf8')
 const $works = load(worksHtml, { decodeEntities: false })
 const logoImage = $works('.logo .logo-image').first()
@@ -147,9 +197,7 @@ const siteLogo = {
 }
 
 const worksCards = listingCards($works, $works('.listing.js-listing').first())
-const worksQuote = $works('.-listing-postfix blockquote p').map((_, element) =>
-  cleanText($works(element).text()),
-).get()
+const worksQuote = $works('.-listing-postfix blockquote p').map((_, element) => cleanText($works(element).text())).get()
 
 const contactsHtml = await readFile(path.join(SOURCE, 'contacts.html'), 'utf8')
 const $contacts = load(contactsHtml, { decodeEntities: false })
@@ -170,8 +218,9 @@ const albums = {
   projects: await parseAlbum('projects.html', 'projects'),
   brands: await parseAlbum('brands.html', 'brands'),
 }
+const home = await parseHome()
 
-const output = `// AUTO-GENERATED from legacy-source. Do not edit directly.\n\nexport interface StructuredImage {\n  src: string\n  srcSet: string\n  alt: string\n  width: number\n  height: number\n  aspect: number\n  placeholderWidth: number\n  placeholderHeight: number\n  placeholderColor: string\n}\n\nexport interface WorksCard {\n  to: string\n  title: string\n  image: StructuredImage\n}\n\nexport interface GalleryPhoto {\n  id: string\n  aspect: number\n  image: StructuredImage\n  fullscreenSrc: string\n  fullscreenWidth: number\n  fullscreenHeight: number\n}\n\nexport interface AlbumCover {\n  title: string\n  poster: string\n  videoSrc: string\n}\n\nexport interface AlbumContent {\n  key: 'portraits' | 'projects' | 'brands'\n  hasCover: boolean\n  cover: AlbumCover | null\n  photos: GalleryPhoto[]\n  quote: string[]\n  related: WorksCard[]\n}\n\nexport const siteLogo = ${JSON.stringify(siteLogo, null, 2)} as const\n\nexport const worksContent = ${JSON.stringify({ cards: worksCards, quote: worksQuote }, null, 2)} as const\n\nexport const contactsContent = ${JSON.stringify(contacts, null, 2)} as const\n\nexport const albums: Record<'portraits' | 'projects' | 'brands', AlbumContent> = ${JSON.stringify(albums, null, 2)}\n`
+const output = `// AUTO-GENERATED from legacy-source. Do not edit directly.\n\nexport interface StructuredImage {\n  src: string\n  srcSet: string\n  alt: string\n  width: number\n  height: number\n  aspect: number\n  placeholderWidth: number\n  placeholderHeight: number\n  placeholderColor: string\n}\n\nexport interface WorksCard {\n  to: string\n  title: string\n  image: StructuredImage\n}\n\nexport interface GalleryPhoto {\n  id: string\n  aspect: number\n  image: StructuredImage\n  fullscreenSrc: string\n  fullscreenWidth: number\n  fullscreenHeight: number\n}\n\nexport interface AlbumCover {\n  title: string\n  poster: string\n  videoSrc: string\n}\n\nexport interface AlbumContent {\n  key: 'portraits' | 'projects' | 'brands'\n  hasCover: boolean\n  cover: AlbumCover | null\n  photos: GalleryPhoto[]\n  quote: string[]\n  related: WorksCard[]\n}\n\nexport interface HomePictureColumn {\n  columnClass: string\n  sectionClass: string\n  image: StructuredImage\n}\n\nexport interface HomePictureRow {\n  containerClass: string\n  columns: HomePictureColumn[]\n}\n\nexport interface HomeAction {\n  columnClass: string\n  href: string\n  label: string\n  iconClass: string\n}\n\nexport interface HomeContent {\n  cover: { title: string; subtitle: string; delay: number; slides: StructuredImage[] }\n  pictureRows: HomePictureRow[]\n  works: WorksCard[]\n  actions: HomeAction[]\n  quote: string[]\n}\n\nexport const siteLogo = ${JSON.stringify(siteLogo, null, 2)} as const\n\nexport const worksContent = ${JSON.stringify({ cards: worksCards, quote: worksQuote }, null, 2)} as const\n\nexport const contactsContent = ${JSON.stringify(contacts, null, 2)} as const\n\nexport const albums: Record<'portraits' | 'projects' | 'brands', AlbumContent> = ${JSON.stringify(albums, null, 2)}\n\nexport const homeContent: HomeContent = ${JSON.stringify(home, null, 2)}\n`
 
 await writeFile(OUT, output)
-console.log(`Generated native React data: ${worksCards.length} works cards, contacts, albums portraits=${albums.portraits.photos.length}, projects=${albums.projects.photos.length}, brands=${albums.brands.photos.length}.`)
+console.log(`Generated native React data: works=${worksCards.length}, home slides=${home.cover.slides.length}, home picture rows=${home.pictureRows.length}, portraits=${albums.portraits.photos.length}, projects=${albums.projects.photos.length}, brands=${albums.brands.photos.length}.`)
