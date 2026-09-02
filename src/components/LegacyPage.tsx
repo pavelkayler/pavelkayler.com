@@ -83,15 +83,15 @@ export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
       })
       masonryInstances.push(masonry)
       container.querySelectorAll('img').forEach((image) => {
-        image.addEventListener('load', () => masonry.layout(), { once: true })
+        image.addEventListener('load', () => masonry.layout?.(), { once: true })
       })
-      requestAnimationFrame(() => masonry.layout())
+      requestAnimationFrame(() => masonry.layout?.())
     })
 
     return () => {
       root.removeEventListener('click', onClick)
       lightboxes.forEach((lightbox) => lightbox.destroy())
-      masonryInstances.forEach((masonry) => masonry.destroy())
+      masonryInstances.forEach((masonry) => masonry.destroy?.())
     }
   }, [html, navigate])
 
