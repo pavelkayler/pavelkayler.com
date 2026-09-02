@@ -15,8 +15,41 @@ body {
   min-height: 1px;
 }
 
-/* The archived Polina CSS expects Wfolio JS to reveal animated sections.
-   Native React routes are already ready when rendered. */
+/* The brand mark is now owned by MainLayout, so React Router route changes never
+   unmount or reposition it. 92px is the exact desktop top position produced by
+   the original HOME cover: 32px cover-wrapper margin + 60px cover-header padding. */
+.persistent-site-logo {
+  position: absolute;
+  z-index: 450;
+  top: 92px;
+  left: 50%;
+  width: 209px;
+  height: 35px;
+  transform: translateX(-50%);
+  line-height: 0;
+  text-align: center;
+}
+
+.persistent-site-logo .logo {
+  margin: 0 !important;
+  opacity: 1 !important;
+  text-align: center;
+}
+
+.persistent-site-logo .logo-with-placeholder {
+  width: 209px;
+  max-width: 209px !important;
+}
+
+/* Keep the old logo slots in the route DOM as invisible spacers. They preserve
+   the exact HOME/WORKS/CONTACTS/album geometry while only the persistent logo is
+   painted. visibility:hidden also removes duplicate links from hit-testing. */
+.native-react-page .logo {
+  visibility: hidden;
+}
+
+/* Wfolio's runtime used to add these ready/visible states after page initialization.
+   React renders the route immediately, so never leave content waiting for removed JS. */
 .react-route .sections-container:not(.-no-animations) .sections-container-inner,
 .react-route .comment-list > .comment,
 .page-footer {
@@ -70,6 +103,12 @@ body {
 }
 
 @media (max-width: 768px) {
+  /* HOME uses a 28px wrapper top margin on mobile instead of 32px; the original
+     60px cover-header padding stays unchanged, therefore its logo begins at 88px. */
+  .persistent-site-logo {
+    top: 88px;
+  }
+
   .react-route .album-masonry .piece {
     width: 50%;
   }

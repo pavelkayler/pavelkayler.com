@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
+import { SiteLogo } from '../components/SiteLogo'
 import { pages, type PageKey } from '../generated/pages'
 import { scheduleRouteWarmup } from '../app/prefetch'
 
@@ -23,6 +24,9 @@ export function MainLayout() {
   return (
     <div className="page-wrapper react-page-wrapper">
       <Header overlay={page?.hasCover ?? false} />
+      <div className="persistent-site-logo">
+        <SiteLogo />
+      </div>
       <Outlet />
       <Footer />
     </div>
