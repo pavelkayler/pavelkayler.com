@@ -4,16 +4,33 @@ on:
   push:
     branches:
       - wfolio-migration
+    paths:
+      - index.html
+      - works.html
+      - portraits.html
+      - projects.html
+      - brands.html
+      - contacts.html
+      - scripts/**
+      - .github/workflows/validate-migration.yml
 
 permissions:
   contents: read
 
 jobs:
   validate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+
     steps:
       - name: Check out migration branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          ref: wfolio-migration
+
+      - name: Generate standalone site in validation workspace
+        run: python3 scripts/migrate_wfolio.py
+
       - name: Validate standalone site
         run: python3 scripts/validate_migration.py

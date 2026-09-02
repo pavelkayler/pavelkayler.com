@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGES = ["index.html", "works.html", "portraits.html", "projects.html", "brands.html", "contacts.html"]
 REMOTE_WFOLIO_URL_RE = re.compile(r"(?:https?:)?//(?:[a-z0-9-]+\.)*wfolio\.ru/", re.I)
 LOCAL_WFOLIO_ASSET_RE = re.compile(
-    r"(?<![\w:/.-])(?:i|static)\.wfolio\.ru/[^\s\"'<>)&,]+",
+    r"(?<![\w:/.-])(?:i|static|vp)\.wfolio\.ru/[^\s\"'<>)&,]+",
     re.I,
 )
 ATTR_RE = re.compile(r"\b(?:src|href|data-src)=[\"']([^\"']+)[\"']", re.I)
@@ -58,7 +58,7 @@ for page in PAGES:
     external_wfolio = sorted(set(m.group(0) for m in REMOTE_WFOLIO_URL_RE.finditer(text)))
     if external_wfolio:
         fail(f"{page}: still contains external Wfolio URL(s): {', '.join(external_wfolio)}")
-    if 'data-gallery-share-url=' in text:
+    if "data-gallery-share-url=" in text:
         fail(f"{page}: obsolete Wfolio gallery share endpoint metadata remains")
     if 'class="branding"' in text or "class='branding'" in text:
         fail(f"{page}: visible Wfolio branding remains")
@@ -100,7 +100,6 @@ for path in required_files:
     if not path.exists():
         fail(f"missing required file: {path.relative_to(ROOT)}")
 
-# The restored Wfolio bundle/CSS should be the original full assets, not migration shims.
 theme_js = required_files[-2]
 theme_css = required_files[-1]
 if theme_js.exists() and theme_js.stat().st_size < 250_000:

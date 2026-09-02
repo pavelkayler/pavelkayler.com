@@ -24,11 +24,13 @@ PAGES = [
     "contacts.html",
 ]
 
+WFOLIO_ASSET_HOSTS = {"i.wfolio.ru", "static.wfolio.ru", "vp.wfolio.ru"}
+
 # Wfolio encodes PhotoSwipe's data-gallery-versions JSON with &quot; entities.
 # Ampersand is therefore an important URL delimiter here; without it a regex can
 # accidentally consume "&quot;" as part of a CDN URL.
 REMOTE_ASSET_RE = re.compile(
-    r"(?:(?:https?:)?//(?:i|static)\.wfolio\.ru/[^\s\"'<>)&,]+)",
+    r"(?:(?:https?:)?//(?:i|static|vp)\.wfolio\.ru/[^\s\"'<>)&,]+)",
     re.I,
 )
 SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
@@ -37,8 +39,8 @@ SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
 def copy_static_tree() -> None:
     shutil.copytree(SITE_SOURCE / "assets", ROOT / "assets", dirs_exist_ok=True)
 
-    # Reuse everything HTTrack already captured. Missing assets are fetched below.
-    for host in ("i.wfolio.ru", "static.wfolio.ru"):
+    # Reuse everything HTTrack / previous migration runs already captured.
+    for host in sorted(WFOLIO_ASSET_HOSTS):
         source = ROOT / "wfolio" / host
         if source.exists():
             shutil.copytree(source, ROOT / host, dirs_exist_ok=True)
@@ -57,7 +59,7 @@ def normalize_remote_url(raw: str) -> str:
 
 def destination_for(url: str) -> Path:
     parsed = urllib.parse.urlparse(url)
-    if parsed.netloc not in {"i.wfolio.ru", "static.wfolio.ru"}:
+    if parsed.netloc not in WFOLIO_ASSET_HOSTS:
         raise ValueError(f"Unexpected Wfolio host: {url}")
 
     rel = urllib.parse.unquote(parsed.path).lstrip("/")
@@ -74,7 +76,7 @@ def download_one(url: str) -> tuple[str, str, int]:
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; PavelKaylerMigration/1.1)",
+        "User-Agent": "Mozilla/5.0 (compatible; PavelKaylerMigration/1.2)",
         "Referer": "https://pavelkayler.ru/",
         "Accept": "*/*",
     }
@@ -83,7 +85,7 @@ def download_one(url: str) -> tuple[str, str, int]:
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=90) as response:
                 data = response.read()
             if not data:
                 raise IOError("empty response")
@@ -91,7 +93,7 @@ def download_one(url: str) -> tuple[str, str, int]:
             tmp.write_bytes(data)
             tmp.replace(dest)
             return url, "downloaded", len(data)
-        except Exception as exc:  # collect failures instead of silently generating broken local URLs
+        except Exception as exc:
             last_error = exc
             time.sleep(1.5 * (attempt + 1))
 
@@ -114,7 +116,7 @@ def download_remote_assets(urls: list[str]) -> dict[str, tuple[str, int]]:
         for future in concurrent.futures.as_completed(futures):
             url, status, size = future.result()
             results[url] = (status, size)
-            print(f"[{status}] {url}")
+            print(f"[{status}] {url} ({size} bytes)")
     return results
 
 
@@ -128,8 +130,27 @@ def remove_wfolio_only_markup(text: str) -> str:
     text = re.sub(r'<meta\b(?=[^>]*(?:name|content)="owner")(?=[^>]*wfolio)[^>]*>', "", text, flags=re.I)
 
     # Wfolio's per-photo share endpoints do not exist on the static replacement.
-    # Removing the attribute is safer than rewriting it to a dead /share/... route.
     text = re.sub(r'\s+data-gallery-share-url=(["\']).*?\1', "", text, flags=re.I)
+
+    # Wfolio event tracking is platform telemetry, not a public-site feature.
+    text = re.sub(
+        r'window\.trackingEnabled\s*=\s*true\s*;',
+        'window.trackingEnabled = false;',
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r'window\.eventTrackerURL\s*=\s*["\']https://track\.wfolio\.ru/api/event["\']\s*;',
+        'window.eventTrackerURL = "";',
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r'window\.eventTrackerExternalIdentifier\s*=\s*["\'][^"\']*["\']\s*;',
+        'window.eventTrackerExternalIdentifier = "";',
+        text,
+        flags=re.I,
+    )
     return text
 
 
@@ -142,11 +163,16 @@ def clean_page(page_name: str, successful_urls: set[str]) -> str:
 
     # HTTrack bookkeeping is not part of the actual website.
     text = re.sub(r"<!--\s*Mirrored from .*?-->", "", text, flags=re.I | re.S)
-    text = re.sub(r"<!--\s*Added by HTTrack\s*-->.*?<!--\s*/Added by HTTrack\s*-->", "", text, flags=re.I | re.S)
+    text = re.sub(
+        r"<!--\s*Added by HTTrack\s*-->.*?<!--\s*/Added by HTTrack\s*-->",
+        "",
+        text,
+        flags=re.I | re.S,
+    )
 
     # URLs already rewritten by HTTrack become relative to the new root pages.
-    text = text.replace("../i.wfolio.ru/", "i.wfolio.ru/")
-    text = text.replace("../static.wfolio.ru/", "static.wfolio.ru/")
+    for host in sorted(WFOLIO_ASSET_HOSTS):
+        text = text.replace(f"../{host}/", f"{host}/")
     text = text.replace("../mc.yandex.ru/", "mc.yandex.ru/")
 
     def asset_replacer(match: re.Match[str]) -> str:
@@ -163,7 +189,12 @@ def clean_page(page_name: str, successful_urls: set[str]) -> str:
     # Domain migration. This intentionally updates visible logo/title strings as well as metadata.
     text = text.replace("pavelkayler.wfolio.pro", "pavelkayler.com")
     text = text.replace("pavelkayler.ru", "pavelkayler.com")
-    text = re.sub(r'window\.domains\s*=\s*\[[^;]*\];', 'window.domains = ["pavelkayler.com"];', text, count=1)
+    text = re.sub(
+        r'window\.domains\s*=\s*\[[^;]*\];',
+        'window.domains = ["pavelkayler.com"];',
+        text,
+        count=1,
+    )
 
     canonical_path = "/" if page_name == "index.html" else "/" + page_name
     canonical_url = "https://pavelkayler.com" + canonical_path
@@ -199,8 +230,18 @@ def write_support_files() -> None:
         "User-agent: *\nAllow: /\n\nSitemap: https://pavelkayler.com/sitemap.xml\n",
         encoding="utf-8",
     )
-    urls = ["/", "/works.html", "/portraits.html", "/projects.html", "/brands.html", "/contacts.html"]
-    sitemap = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    urls = [
+        "/",
+        "/works.html",
+        "/portraits.html",
+        "/projects.html",
+        "/brands.html",
+        "/contacts.html",
+    ]
+    sitemap = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
     sitemap += [f"  <url><loc>https://pavelkayler.com{path}</loc></url>" for path in urls]
     sitemap.append("</urlset>")
     (ROOT / "sitemap.xml").write_text("\n".join(sitemap) + "\n", encoding="utf-8")
@@ -213,7 +254,8 @@ def main() -> None:
     results = download_remote_assets(remote_urls)
 
     successful = {
-        url for url, (status, _) in results.items()
+        url
+        for url, (status, _) in results.items()
         if status in {"existing", "downloaded"}
     }
 
@@ -227,22 +269,26 @@ def main() -> None:
         if path.exists():
             path.unlink()
 
+    failed = [
+        {"url": url, "error": status}
+        for url, (status, _) in sorted(results.items())
+        if status.startswith("failed:")
+    ]
     report = {
         "remote_assets_found": len(remote_urls),
         "localized": len(successful),
         "downloaded": sum(1 for status, _ in results.values() if status == "downloaded"),
         "already_present": sum(1 for status, _ in results.values() if status == "existing"),
-        "failed": [
-            {"url": url, "error": status}
-            for url, (status, _) in sorted(results.items())
-            if status.startswith("failed:")
-        ],
+        "failed": failed,
     }
     (ROOT / "migration-report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
+
+    if failed:
+        raise SystemExit("Migration left remote Wfolio assets unresolved")
 
 
 if __name__ == "__main__":
