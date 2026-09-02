@@ -52,6 +52,16 @@ jobs:
             exit 1
           fi
 
+          test -d dist/assets/fonts/oswald
+          test "$(find dist/assets/fonts/oswald -type f -name '*.woff2' | wc -l)" -eq 10
+          test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUJiZTaR.woff2
+          test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUJiZTaR.woff2
+          grep -q 'assets/fonts/oswald/' dist/legacy-theme.css
+          if grep -R -E 'fonts\.(gstatic|googleapis)\.com' dist --include='*.css' --include='*.html' --include='*.js'; then
+            echo "External Google Fonts reference remains in production"
+            exit 1
+          fi
+
           test ! -f src/components/LegacyPage.tsx
           test ! -f src/generated/structured.ts
           ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
