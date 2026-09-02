@@ -36,9 +36,15 @@ body {
   opacity: 1;
 }
 
-/* The Wfolio placeholders retain the exact aspect-ratio geometry, but React no longer
-   runs lazysizes. Hide only their paint while keeping their layout footprint. */
-.react-route .lazy-image .placeholder,
+/* Preserve Wfolio's coloured aspect-ratio canvases while an image is downloading and
+   decoding. The real bitmap fades over the already-laid-out placeholder, so first-time
+   navigation has no blank reflow/jump. */
+.react-route .lazy-image .placeholder {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 180ms ease-out;
+}
+
 .react-route .logo-placeholder {
   visibility: hidden;
 }
@@ -49,6 +55,17 @@ body {
 
 .react-route .lazy-image img {
   visibility: visible !important;
+  opacity: 0 !important;
+  transition: opacity 180ms ease-out;
+}
+
+.react-route .lazy-image.is-loaded img {
+  opacity: 1 !important;
+}
+
+.react-route .lazy-image.is-loaded .placeholder {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .react-route .js-gallery-link {
