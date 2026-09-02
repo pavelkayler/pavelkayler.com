@@ -6,7 +6,10 @@ on:
       - wfolio-migration
     paths:
       - scripts/migrate_wfolio.py
+      - scripts/apply_responsive.py
       - scripts/validate_migration.py
+      - scripts/validate_responsive.py
+      - assets/mobile-overrides.css
       - .github/workflows/migrate-wfolio.yml
 
 permissions:
@@ -28,8 +31,13 @@ jobs:
       - name: Localize Wfolio assets and clean HTML
         run: python3 scripts/migrate_wfolio.py
 
+      - name: Apply responsive compatibility layer
+        run: python3 scripts/apply_responsive.py
+
       - name: Validate generated standalone site
-        run: python3 scripts/validate_migration.py
+        run: |
+          python3 scripts/validate_migration.py
+          python3 scripts/validate_responsive.py
 
       - name: Commit generated standalone site
         run: |

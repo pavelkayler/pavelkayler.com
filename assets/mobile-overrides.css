@@ -1,0 +1,311 @@
+/*
+ * Responsive overrides for the restored Wfolio Polina theme.
+ * Desktop (>= 769px) is deliberately untouched.
+ */
+
+@media (max-width: 768px) {
+  html {
+    overflow-x: hidden;
+    scroll-padding-top: 64px;
+  }
+
+  body {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .page-wrapper {
+    min-width: 0;
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  /* Header: keep the original one-line navigation instead of introducing
+     a different mobile/burger-menu interaction. */
+  .menu {
+    min-width: 0;
+  }
+
+  .menu .inner {
+    width: calc(100% - 24px);
+  }
+
+  .menu .inner::after {
+    display: none;
+  }
+
+  .menu .inner > .item {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .page-header::after {
+    width: calc(100% - 24px);
+  }
+
+  .page-header .social-links {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .page-header .social-links > .item {
+    margin: 0 5px 0 0;
+  }
+
+  .page-header .social-links > .item:last-child {
+    margin-right: 0;
+  }
+
+  .page-header .social-links > .item > .link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    min-height: 44px;
+  }
+
+  .menu-list {
+    flex-wrap: nowrap;
+    padding: 8px 0;
+  }
+
+  .menu-list > .menu-item {
+    margin: 0 6px;
+    padding: 10px 0;
+  }
+
+  .menu-list .menu-item > .link {
+    font-size: 11px;
+  }
+
+  /* Covers retain the Wfolio composition, but no longer assume a 1280px
+     virtual screen. svh avoids the mobile browser address-bar jump. */
+  .cover {
+    height: 80vh;
+    height: 80svh;
+    min-height: min(400px, 100svh);
+  }
+
+  .cover.-fullscreen {
+    height: 100vh;
+    height: 100svh;
+  }
+
+  .cover .cover-wrapper {
+    margin: 28px 20px 20px;
+  }
+
+  .cover .cover-content {
+    max-width: 100%;
+  }
+
+  .cover .cover-header.-small {
+    font-size: clamp(36px, 12vw, 50px);
+  }
+
+  .cover .cover-header.-medium {
+    font-size: clamp(34px, 10vw, 44px);
+  }
+
+  .cover .cover-header.-large {
+    font-size: clamp(30px, 9vw, 38px);
+  }
+
+  .cover .cover-content p {
+    font-size: 14px;
+  }
+
+  .cover .cover-count {
+    padding-right: 20px !important;
+    padding-left: 20px !important;
+  }
+
+  .cover-arrows .cover-arrow .arrow {
+    width: 64px;
+  }
+
+  .cover-arrows .cover-arrow:hover .arrow {
+    width: 64px;
+  }
+
+  /* Main content: 16px edge gutters instead of the desktop theme's effective
+     50px+ gutters. */
+  .page-footer .inner,
+  .sections-container .sections-container-inner {
+    width: 100%;
+    max-width: calc(100% - 32px);
+  }
+
+  .sections-container:not(.-max-width) .sections-container-inner {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .sections-container.-large-pad-before .sections-container-inner {
+    padding-top: 64px;
+  }
+
+  .sections-container.-large-pad-after .sections-container-inner {
+    padding-bottom: 64px;
+  }
+
+  .sections-container.-xlarge-pad-before .sections-container-inner {
+    padding-top: 96px;
+  }
+
+  .sections-container.-xlarge-pad-after .sections-container-inner {
+    padding-bottom: 96px;
+  }
+
+  .page-main .logo {
+    margin-top: 36px;
+  }
+
+  .logo {
+    margin-bottom: 36px;
+  }
+
+  .page-main:not(.sections-page) .logo + .sections-container,
+  .page-main:not(.sections-page) .sections-container:first-child {
+    margin-top: 36px;
+  }
+
+  .page-footer {
+    margin-top: 72px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Wfolio's col-sm widths are unconditional in the exported CSS. On an actual
+     device viewport these columns need to stack. */
+  .row {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .row > [class^="col-"],
+  .row > [class*=" col-"] {
+    width: 100%;
+    margin-left: 0;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  /* Album pages: two-column photographic grid, matching the original masonry
+     interaction while keeping each image large enough to inspect. */
+  .album-grid {
+    margin: -4px;
+  }
+
+  .album-grid > .piece {
+    width: 50%;
+    padding: 4px;
+  }
+
+  .album-lineup > .piece:not(:last-child) {
+    margin-bottom: 10px;
+  }
+
+  /* Category / project cards use one column on phones. */
+  .listing {
+    margin: -8px;
+  }
+
+  .listing .listing-item {
+    width: 100%;
+    padding: 8px;
+  }
+
+  .listing .listing-caption {
+    padding: 12px 0 18px;
+  }
+
+  /* Generic media safety for content that came from the desktop builder. */
+  video,
+  iframe,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  .modal .modal-window,
+  .login-modal .modal-window,
+  .order-modal .modal-window,
+  .comment-modal .modal-window {
+    width: calc(100% - 32px);
+    max-width: none;
+    padding: 48px 24px;
+  }
+
+  .floating-buttons {
+    right: max(10px, env(safe-area-inset-right, 0px));
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  }
+
+  /* PhotoSwipe already implements touch navigation. These rules only keep its
+     controls clear of notches / rounded device corners. */
+  .pswp__button--close {
+    margin-right: env(safe-area-inset-right, 0px);
+  }
+
+  .pswp__counter {
+    margin-left: env(safe-area-inset-left, 0px);
+  }
+}
+
+@media (min-width: 540px) and (max-width: 768px) {
+  .listing .listing-item {
+    width: 50%;
+  }
+}
+
+@media (max-width: 420px) {
+  .menu .inner {
+    width: calc(100% - 16px);
+  }
+
+  .page-header::after {
+    width: calc(100% - 16px);
+  }
+
+  .page-header .social-links {
+    font-size: 14px;
+  }
+
+  .page-header .social-links > .item {
+    margin-right: 3px;
+  }
+
+  .page-header .social-links > .item > .link {
+    min-width: 20px;
+  }
+
+  .menu-list > .menu-item {
+    margin-right: 4px;
+    margin-left: 4px;
+  }
+
+  .menu-list .menu-item > .link {
+    font-size: 10.5px;
+  }
+
+  .cover .cover-wrapper {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .page-footer .inner,
+  .sections-container .sections-container-inner {
+    max-width: calc(100% - 24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sections-container:not(.-no-animations) .sections-container-inner,
+  .comment-list > .comment,
+  .page-footer,
+  .page-header,
+  .lazy-image > img,
+  .lazy-image > video {
+    transition-duration: 0.01ms !important;
+  }
+}
