@@ -1,4 +1,4 @@
-# Preview revision: react-v2-515972f-2026-09-02
+# Preview revision: react-v2-daed996-2026-09-02
 name: Publish React V2 preview
 
 on:
@@ -46,12 +46,15 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/404.html
+          test -f dist/legacy-theme.css
           test -d dist/_app
           test -f dist/works/index.html
           test -f dist/portraits/index.html
           test -f dist/projects/index.html
           test -f dist/brands/index.html
           test -f dist/contacts/index.html
+          grep -q "page-header" dist/legacy-theme.css
+          grep -q "\.cover" dist/legacy-theme.css
           ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
           echo "React SPA output is valid"
           du -sh dist
