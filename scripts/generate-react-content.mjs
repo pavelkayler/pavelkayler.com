@@ -17,21 +17,6 @@ const pageDefs = [
   ['contacts', 'contacts.html', '/contacts'],
 ]
 
-const routeMap = new Map([
-  ['index.html', '/'],
-  ['./index.html', '/'],
-  ['works.html', '/works'],
-  ['./works.html', '/works'],
-  ['portraits.html', '/portraits'],
-  ['./portraits.html', '/portraits'],
-  ['projects.html', '/projects'],
-  ['./projects.html', '/projects'],
-  ['brands.html', '/brands'],
-  ['./brands.html', '/brands'],
-  ['contacts.html', '/contacts'],
-  ['./contacts.html', '/contacts'],
-])
-
 const assets = new Set([
   'i.wfolio.ru/x/24-OcBl4_jLHPgDwqv0G81XC6E-X62eX/mEXzmGl_g4elKlZ5M50eLzysBe3_E8_3/4aRhqmvHzpnrERHNxOKUSDiEpB5ZXNHI/TrHg6dWwkLRTN2uwxrzXa4bcQyviyd-3/2gfFMzYKUVhcD8UvQPYKSg.png',
 ])
@@ -71,34 +56,14 @@ function selectSrcset(raw) {
     .map(({ src, width }) => `${localize(src)} ${width}w`).join(', ')
 }
 
-function rewritePage($, root) {
-  root.find('script, noscript').remove()
-
-  root.find('a[href]').each((_, element) => {
-    const node = $(element)
-    const href = node.attr('href')
-    if (routeMap.has(href)) node.attr('href', routeMap.get(href))
-  })
-
+function scanPageAssets($, root) {
   root.find('img').each((_, element) => {
     const node = $(element)
-    const dataSrc = node.attr('data-src')
-    const currentSrc = node.attr('src')
-    if (dataSrc && isLocalAsset(dataSrc)) node.attr('src', localize(dataSrc))
-    else if (currentSrc && isLocalAsset(currentSrc)) node.attr('src', localize(currentSrc))
+    const source = node.attr('data-src') || node.attr('src')
+    if (source && isLocalAsset(source)) node.attr('src', localize(source))
 
     const srcset = selectSrcset(node.attr('data-srcset') || node.attr('srcset'))
-    if (srcset) {
-      node.attr('srcset', srcset)
-      node.attr('sizes', '(max-width: 768px) 50vw, 33vw')
-    }
-
-    const inCover = node.closest('.cover').length > 0
-    node.attr('loading', inCover ? 'eager' : 'lazy')
-    node.attr('decoding', 'async')
-    if (inCover) node.attr('fetchpriority', 'high')
-    node.removeAttr('data-src data-srcset data-sizes')
-    node.removeClass('lazyload lazyunload')
+    if (srcset) node.attr('srcset', srcset)
   })
 
   root.find('a.js-gallery-link').each((_, element) => {
@@ -109,11 +74,7 @@ function rewritePage($, root) {
       const versions = JSON.parse(raw)
       const best = versions.filter((item) => item?.src && item?.w && item?.h)
         .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
-      if (!best) return
-      node.attr('href', localize(best.src))
-      node.attr('data-pswp-width', String(best.w))
-      node.attr('data-pswp-height', String(best.h))
-      node.removeAttr('data-gallery-versions')
+      if (best) node.attr('href', localize(best.src))
     } catch (error) {
       console.warn('Could not parse gallery versions:', error)
     }
@@ -123,7 +84,6 @@ function rewritePage($, root) {
     const node = $(element)
     const poster = node.attr('poster')
     if (poster && isLocalAsset(poster)) node.attr('poster', localize(poster))
-    node.attr('preload', 'metadata')
   })
 
   root.find('source[src]').each((_, element) => {
@@ -139,17 +99,6 @@ function rewritePage($, root) {
       return isLocalAsset(url) ? `url(${localize(url)})` : full
     }))
   })
-
-  // These visibility states were previously applied by the Wfolio runtime.
-  // React owns initialization now, so render the archived markup in its ready state.
-  root.find('.sections-container').addClass('-visible')
-  root.find('.logo').addClass('-visible')
-  root.find('.comment-list > .comment').addClass('-visible')
-  root.find('.slider').each((_, slider) => {
-    const slides = $(slider).find('.slide')
-    slides.removeClass('-visible')
-    slides.first().addClass('-visible')
-  })
 }
 
 await mkdir(OUT, { recursive: true })
@@ -163,10 +112,11 @@ for (const [key, file, routePath] of pageDefs) {
   const main = $('main.page-main').first()
   if (cover.length) wrapper.append(cover.clone())
   if (main.length) wrapper.append(main.clone())
-  rewritePage($, wrapper)
 
-  const htmlOut = wrapper.html() || ''
-  const localMatches = htmlOut.match(/__BASE__((?:i\.wfolio\.ru|static\.wfolio\.ru|vp\.wfolio\.ru|assets)\/[^\s"'<>)]+)/g) || []
+  scanPageAssets($, wrapper)
+
+  const scannedHtml = wrapper.html() || ''
+  const localMatches = scannedHtml.match(/__BASE__((?:i\.wfolio\.ru|static\.wfolio\.ru|vp\.wfolio\.ru|assets)\/[^\s"'<>)]+)/g) || []
   const prefetchAssets = [...new Set(localMatches.map((value) => value.replace('__BASE__', '')))].slice(0, 6)
 
   pages[key] = {
@@ -176,12 +126,11 @@ for (const [key, file, routePath] of pageDefs) {
     description: $('meta[name="description"]').attr('content') || '',
     bodyClass: $('body').attr('class') || 'theme-polina',
     hasCover: cover.length > 0,
-    html: htmlOut,
     prefetchAssets,
   }
 }
 
-const ts = `// AUTO-GENERATED. Do not edit directly.\nexport type PageKey = 'home' | 'works' | 'portraits' | 'projects' | 'brands' | 'contacts'\nexport interface GeneratedPage {\n  key: PageKey\n  path: string\n  title: string\n  description: string\n  bodyClass: string\n  hasCover: boolean\n  html: string\n  prefetchAssets: string[]\n}\nexport const pages: Record<PageKey, GeneratedPage> = ${JSON.stringify(pages, null, 2)}\n`
+const ts = `// AUTO-GENERATED. Do not edit directly.\nexport type PageKey = 'home' | 'works' | 'portraits' | 'projects' | 'brands' | 'contacts'\nexport interface GeneratedPage {\n  key: PageKey\n  path: string\n  title: string\n  description: string\n  bodyClass: string\n  hasCover: boolean\n  prefetchAssets: string[]\n}\nexport const pages: Record<PageKey, GeneratedPage> = ${JSON.stringify(pages, null, 2)}\n`
 await writeFile(path.join(OUT, 'pages.ts'), ts)
 await writeFile(path.join(OUT, 'asset-manifest.json'), JSON.stringify([...assets].sort(), null, 2) + '\n')
-console.log(`Generated ${Object.keys(pages).length} React routes; ${assets.size} localized assets selected.`)
+console.log(`Generated ${Object.keys(pages).length} React route metadata entries; ${assets.size} localized assets selected.`)
