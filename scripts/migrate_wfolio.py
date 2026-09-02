@@ -25,6 +25,7 @@ PAGES = [
 ]
 
 WFOLIO_ASSET_HOSTS = {"i.wfolio.ru", "static.wfolio.ru", "vp.wfolio.ru"}
+SITE_FIXES_TAG = '<script src="assets/site-fixes.js" defer="defer"></script>'
 
 # Wfolio encodes PhotoSwipe's data-gallery-versions JSON with &quot; entities.
 # Ampersand is therefore an important URL delimiter here; without it a regex can
@@ -76,7 +77,7 @@ def download_one(url: str) -> tuple[str, str, int]:
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; PavelKaylerMigration/1.2)",
+        "User-Agent": "Mozilla/5.0 (compatible; PavelKaylerMigration/1.3)",
         "Referer": "https://pavelkayler.ru/",
         "Accept": "*/*",
     }
@@ -158,6 +159,47 @@ def replace_tag(text: str, selector_re: str, replacement: str) -> str:
     return re.sub(selector_re, replacement, text, count=1, flags=re.I)
 
 
+def apply_content_fixes(text: str) -> str:
+    # Footer copyright on every public page.
+    text = re.sub(r"©\s*2025\s+Pavel\s+Kayler", "© 2026 Pavel Kayler", text)
+
+    # Wfolio exported Instagram as a generic external-link glyph. Keep the other
+    # social icons untouched and restore only Instagram to Font Awesome Brands.
+    instagram_anchor_re = re.compile(
+        r'(<a\b[^>]*href=["\'][^"\']*instagram\.com[^"\']*["\'][^>]*>)(.*?)(</a>)',
+        re.I | re.S,
+    )
+
+    def fix_instagram_anchor(match: re.Match[str]) -> str:
+        body = re.sub(
+            r'<i\b[^>]*class=["\'][^"\']*["\'][^>]*></i>',
+            '<i class="fab fa-instagram"></i>',
+            match.group(2),
+            count=1,
+            flags=re.I,
+        )
+        return match.group(1) + body + match.group(3)
+
+    text = instagram_anchor_re.sub(fix_instagram_anchor, text)
+
+    # Standalone compatibility is deliberately loaded after the original deferred
+    # Polina bundle, so it can correct Wfolio runtime targets and repair gallery
+    # initialization without forking the large theme bundle.
+    if SITE_FIXES_TAG not in text:
+        if re.search(r"</body\s*>", text, flags=re.I):
+            text = re.sub(
+                r"</body\s*>",
+                SITE_FIXES_TAG + "\n</body>",
+                text,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            text += "\n" + SITE_FIXES_TAG + "\n"
+
+    return text
+
+
 def clean_page(page_name: str, successful_urls: set[str]) -> str:
     text = (SITE_SOURCE / page_name).read_text(encoding="utf-8")
 
@@ -219,6 +261,8 @@ def clean_page(page_name: str, successful_urls: set[str]) -> str:
         r'<meta\b(?=[^>]*(?:name|property)=["\']twitter:domain["\'])[^>]*>',
         '<meta property="twitter:domain" content="pavelkayler.com" />',
     )
+
+    text = apply_content_fixes(text)
 
     # Keep the original viewport/layout untouched during the fidelity-first restoration pass.
     return text.strip() + "\n"
