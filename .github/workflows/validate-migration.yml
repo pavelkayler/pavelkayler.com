@@ -1,0 +1,19 @@
+name: Validate standalone site
+
+on:
+  push:
+    branches:
+      - wfolio-migration
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+      - name: Validate standalone site
+        run: python3 scripts/validate_migration.py
