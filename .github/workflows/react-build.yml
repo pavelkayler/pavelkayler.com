@@ -1,0 +1,36 @@
+name: Validate React V2
+
+on:
+  push:
+    branches:
+      - react-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Build React SPA
+        env:
+          VITE_BASE_PATH: /pavelkayler.com/
+        run: npm run build
+      - name: Check SPA output
+        run: |
+          test -f dist/index.html
+          test -f dist/404.html
+          test -d dist/_app
+          ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
+          echo "React V2 build is valid"

@@ -1,0 +1,60 @@
+html {
+  background: #fff;
+}
+
+body {
+  margin: 0;
+}
+
+#root,
+.react-page-wrapper {
+  min-height: 100vh;
+}
+
+.react-route {
+  min-height: 1px;
+}
+
+/* The Wfolio placeholders retain the exact aspect-ratio geometry, but React no longer
+   runs lazysizes. Hide only their paint while keeping their layout footprint. */
+.react-route .lazy-image .placeholder,
+.react-route .logo-placeholder {
+  visibility: hidden;
+}
+
+.react-route img {
+  opacity: 1 !important;
+}
+
+.react-route .lazy-image img {
+  visibility: visible !important;
+}
+
+.react-route .js-gallery-link {
+  cursor: zoom-in;
+}
+
+/* Original Polina used JS Masonry; preserve its column sizing with a tiny neutral bridge. */
+.react-route .album-masonry .piece {
+  width: 33.333333%;
+}
+
+@media (max-width: 768px) {
+  .react-route .album-masonry .piece {
+    width: 50%;
+  }
+}
+
+@media (max-width: 420px) {
+  .react-route .album-masonry .piece {
+    width: 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
