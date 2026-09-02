@@ -171,15 +171,15 @@ const routePrefetch = {
   contacts: [prefetchImage(contactsContent.image, '(max-width: 768px) 100vw, 33vw')],
 }
 
-const typeImport = "import type { AlbumContent, ContactsContent, HomeContent, SiteLogoData, WorksContent } from '../../content/types'\n"
+const typeImport = "import type * as Types from '../../content/types'\n"
 await Promise.all([
-  writeFile(path.join(OUT_DIR, 'site.ts'), `// AUTO-GENERATED.\n${typeImport}export const siteLogo: SiteLogoData = ${JSON.stringify(siteLogo, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'home.ts'), `// AUTO-GENERATED.\n${typeImport}export const homeContent: HomeContent = ${JSON.stringify(homeContent, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'works.ts'), `// AUTO-GENERATED.\n${typeImport}export const worksContent: WorksContent = ${JSON.stringify(worksContent, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'contacts.ts'), `// AUTO-GENERATED.\n${typeImport}export const contactsContent: ContactsContent = ${JSON.stringify(contactsContent, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'portraits.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(portraits, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'projects.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(projects, null, 2)}\n`),
-  writeFile(path.join(OUT_DIR, 'brands.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(brands, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'site.ts'), `// AUTO-GENERATED.\n${typeImport}export const siteLogo: Types.SiteLogoData = ${JSON.stringify(siteLogo, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'home.ts'), `// AUTO-GENERATED.\n${typeImport}export const homeContent: Types.HomeContent = ${JSON.stringify(homeContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'works.ts'), `// AUTO-GENERATED.\n${typeImport}export const worksContent: Types.WorksContent = ${JSON.stringify(worksContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'contacts.ts'), `// AUTO-GENERATED.\n${typeImport}export const contactsContent: Types.ContactsContent = ${JSON.stringify(contactsContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'portraits.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: Types.AlbumContent = ${JSON.stringify(portraits, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'projects.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: Types.AlbumContent = ${JSON.stringify(projects, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'brands.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: Types.AlbumContent = ${JSON.stringify(brands, null, 2)}\n`),
   writeFile(path.join(OUT_DIR, 'prefetch.ts'), `// AUTO-GENERATED.\nimport type { PageKey } from '../pages'\nexport interface PrefetchImageSpec { src: string; srcSet: string; sizes: string }\nexport const routePrefetch: Record<PageKey, PrefetchImageSpec[]> = ${JSON.stringify(routePrefetch, null, 2)}\n`),
 ])
 
