@@ -39,7 +39,6 @@ jobs:
           test -f dist/contacts/index.html
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
-          ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
 
           test -f dist/assets/mobile-overrides.css
           test -f dist/assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css
@@ -57,10 +56,30 @@ jobs:
           test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUJiZTaR.woff2
           test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUJiZTaR.woff2
           grep -q 'assets/fonts/oswald/' dist/legacy-theme.css
-          if grep -R -E 'fonts\.(gstatic|googleapis)\.com' dist --include='*.css' --include='*.html' --include='*.js'; then
-            echo "External Google Fonts reference remains in production"
-            exit 1
-          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          remote_wfolio = re.compile(r"(?i)(?:https?:)?//[^\"'\s)>]*wfolio\.ru")
+          remote_google_fonts = re.compile(r"(?i)fonts\.(?:gstatic|googleapis)\.com")
+          hits = []
+
+          for suffix in ('*.html', '*.css', '*.js'):
+              for path in Path('dist').rglob(suffix):
+                  text = path.read_text('utf-8', errors='ignore')
+                  for pattern, label in ((remote_wfolio, 'remote Wfolio'), (remote_google_fonts, 'Google Fonts')):
+                      match = pattern.search(text)
+                      if match:
+                          hits.append((str(path), label, match.group(0)))
+
+          if hits:
+              for path, label, value in hits:
+                  print(f'{label} URL remains in {path}: {value}')
+              raise SystemExit('Production still contains remote service dependencies')
+
+          print('No remote Wfolio or Google Fonts URLs in production text assets')
+          PY
 
           test ! -f src/components/LegacyPage.tsx
           test ! -f src/generated/structured.ts
