@@ -139,6 +139,17 @@ function rewritePage($, root) {
       return isLocalAsset(url) ? `url(${localize(url)})` : full
     }))
   })
+
+  // These visibility states were previously applied by the Wfolio runtime.
+  // React owns initialization now, so render the archived markup in its ready state.
+  root.find('.sections-container').addClass('-visible')
+  root.find('.logo').addClass('-visible')
+  root.find('.comment-list > .comment').addClass('-visible')
+  root.find('.slider').each((_, slider) => {
+    const slides = $(slider).find('.slide')
+    slides.removeClass('-visible')
+    slides.first().addClass('-visible')
+  })
 }
 
 await mkdir(OUT, { recursive: true })

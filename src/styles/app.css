@@ -1,5 +1,5 @@
 html {
-  background: #fff;
+  background: #1e1e1e;
 }
 
 body {
@@ -13,6 +13,27 @@ body {
 
 .react-route {
   min-height: 1px;
+}
+
+/* Wfolio's runtime used to add these ready/visible states after page initialization.
+   React renders the route immediately, so never leave content waiting for removed JS. */
+.react-route .sections-container:not(.-no-animations) .sections-container-inner,
+.react-route .comment-list > .comment,
+.page-footer {
+  transform: none !important;
+  opacity: 1 !important;
+}
+
+.react-route .logo {
+  opacity: 1 !important;
+}
+
+/* The old cover slider was initialized by Wfolio JS. Until it is replaced by the
+   React slider, make the first slide the deterministic visible hero frame. */
+.react-route .slider .slide:first-child {
+  visibility: visible;
+  z-index: 100;
+  opacity: 1;
 }
 
 /* The Wfolio placeholders retain the exact aspect-ratio geometry, but React no longer

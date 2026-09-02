@@ -1,52 +1,52 @@
 import { NavLink } from 'react-router-dom'
 import { prefetchRoute } from '../app/prefetch'
 
-const socialLinks = [
-  { href: 'https://t.me/pavelkayler', title: 'Telegram', icon: 'fab fa-telegram-plane' },
-  { href: 'https://www.instagram.com/pavelkayler/', title: 'Instagram', icon: 'fab fa-instagram' },
-  { href: 'https://vk.com/pavelkayler', title: 'VK', icon: 'fab fa-vk' },
-  { href: 'https://www.youtube.com/@pavelkayler', title: 'YouTube', icon: 'fab fa-youtube' },
+const socials = [
+  { href: 'https://t.me/pavelkayler', icon: 'fab fa-telegram-plane', label: 'Telegram' },
+  { href: 'https://www.instagram.com/pavelkayler/', icon: 'fab fa-instagram', label: 'Instagram' },
+  { href: 'https://vk.com/pavelkayler', icon: 'fab fa-vk', label: 'VK' },
+  { href: 'https://www.youtube.com/@pavelkayler', icon: 'fab fa-youtube', label: 'YouTube' },
 ]
 
-interface HeaderProps {
-  overlay: boolean
-}
+const nav = [
+  { to: '/', label: 'HOME' },
+  { to: '/works', label: 'WORKS' },
+  { to: '/contacts', label: 'CONTACTS' },
+]
 
-function SpaLink({ to, children }: { to: string; children: string }) {
-  const prefetch = () => prefetchRoute(to)
-  return (
-    <NavLink
-      className="link"
-      to={to}
-      onMouseEnter={prefetch}
-      onFocus={prefetch}
-      onPointerDown={prefetch}
-    >
-      {children}
-    </NavLink>
-  )
-}
+export function Header({ overlay = false }: { overlay?: boolean }) {
+  const warmRoute = (path: string) => () => prefetchRoute(path)
 
-export function Header({ overlay }: HeaderProps) {
   return (
-    <header className={`page-header js-header${overlay ? ' -overlay' : ''}`}>
+    <header className={`page-header js-header -visible${overlay ? ' -overlay' : ''}`}>
       <div className="menu js-menu">
         <div className="inner">
           <div className="item">
             <ul className="social-links js-social-links">
-              {socialLinks.map((social) => (
+              {socials.map((social) => (
                 <li className="item" key={social.href}>
-                  <a className="link" href={social.href} title={social.title} target="_blank" rel="noopener noreferrer">
-                    <i className={social.icon} />
+                  <a className="link" href={social.href} title={social.label} target="_blank" rel="noopener noreferrer" aria-label={social.label}>
+                    <i className={social.icon} aria-hidden="true" />
                   </a>
                 </li>
               ))}
             </ul>
           </div>
           <ul className="menu-list js-menu-list">
-            <li className="menu-item js-menu-item"><SpaLink to="/">HOME</SpaLink></li>
-            <li className="menu-item js-menu-item"><SpaLink to="/works">WORKS</SpaLink></li>
-            <li className="menu-item js-menu-item"><SpaLink to="/contacts">CONTACTS</SpaLink></li>
+            {nav.map((item) => (
+              <li className="menu-item js-menu-item" key={item.to}>
+                <NavLink
+                  className={({ isActive }) => `link${isActive ? ' -active' : ''}`}
+                  to={item.to}
+                  end={item.to === '/'}
+                  onPointerEnter={warmRoute(item.to)}
+                  onFocus={warmRoute(item.to)}
+                  onPointerDown={warmRoute(item.to)}
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
           </ul>
         </div>
       </div>

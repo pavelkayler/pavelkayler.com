@@ -3,13 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="dark light" />
     <link rel="icon" href="%BASE_URL%favicon.ico" />
+    <!-- Wfolio kept most of the Polina page/layout CSS inline in every HTML page.
+         copy-react-assets.mjs extracts that CSS into this standalone production file. -->
+    <link rel="stylesheet" href="%BASE_URL%legacy-theme.css" />
     <link rel="stylesheet" href="%BASE_URL%assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css" />
     <link rel="stylesheet" href="%BASE_URL%assets/mobile-overrides.css" />
     <title>Pavel Kayler | Photographer</title>
   </head>
-  <body class="theme-polina">
+  <body class="theme-polina -has-cover -color-scheme -scheme-dark -accented uc-page-type-page">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

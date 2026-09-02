@@ -30,6 +30,9 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/404.html
+          test -f dist/legacy-theme.css
           test -d dist/_app
+          grep -q "page-header" dist/legacy-theme.css
+          grep -q "\.cover" dist/legacy-theme.css
           ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
           echo "React V2 build is valid"
