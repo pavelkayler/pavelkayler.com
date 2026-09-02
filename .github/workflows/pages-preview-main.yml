@@ -1,4 +1,4 @@
-# Preview revision: react-v2-679955f-2026-09-02
+# Preview revision: react-v2-e37a0d9-2026-09-02
 name: Publish React V2 preview
 
 on:
@@ -56,6 +56,16 @@ jobs:
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
           ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
+
+          test -f dist/assets/mobile-overrides.css
+          test -f dist/assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css
+          test ! -d dist/assets/flags
+          test ! -d dist/assets/folio/desktop/themes
+          if find dist/assets -type f -name '*.js' -print -quit | grep -q .; then
+            echo "Unexpected legacy JavaScript shipped under dist/assets"
+            exit 1
+          fi
+
           test ! -f src/components/LegacyPage.tsx
           test ! -f src/generated/structured.ts
           ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
