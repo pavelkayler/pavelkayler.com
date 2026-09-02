@@ -1,4 +1,4 @@
-# Preview revision: react-v2-9a403e7-2026-09-02
+# Preview revision: react-v2-d0a28ea-2026-09-02
 name: Publish React V2 preview
 
 on:
@@ -56,7 +56,10 @@ jobs:
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
           ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
-          echo "React SPA output is valid"
+          test ! -f src/components/LegacyPage.tsx
+          ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
+          ! grep -q "html: string" src/generated/pages.ts || exit 1
+          echo "Native React SPA output is valid"
           du -sh dist
 
       - name: Configure GitHub Pages
