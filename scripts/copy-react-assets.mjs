@@ -20,12 +20,65 @@ async function copyAsset(relativePath) {
   }
 }
 
+const oswaldV49Files = [
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUtiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUJiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUliZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUhiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUZiZQ.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUtiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUJiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUliZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUhiZTaR.woff2',
+  'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUZiZQ.woff2',
+]
+
+const oswaldRemoteBase = 'https://fonts.gstatic.com/s/oswald/v49/'
+const oswaldLocalBase = 'assets/fonts/oswald/'
+
+async function fetchFont(url, attempts = 3) {
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'user-agent': 'pavelkayler.com-static-build/1.0' },
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (buffer.length < 1000 || buffer.subarray(0, 4).toString('ascii') !== 'wOF2') {
+        throw new Error(`invalid WOFF2 payload (${buffer.length} bytes)`)
+      }
+      return buffer
+    } catch (error) {
+      lastError = error
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+    }
+  }
+  throw new Error(`Could not fetch ${url}: ${lastError}`)
+}
+
+async function selfHostArchivedOswald() {
+  const targetDir = path.join(DIST, oswaldLocalBase)
+  await mkdir(targetDir, { recursive: true })
+  let bytes = 0
+
+  for (const filename of oswaldV49Files) {
+    const buffer = await fetchFont(`${oswaldRemoteBase}${filename}`)
+    await writeFile(path.join(targetDir, filename), buffer)
+    bytes += buffer.length
+  }
+
+  console.log(`Self-hosted Oswald v49: ${oswaldV49Files.length} WOFF2 files, ${(bytes / 1024).toFixed(1)} KiB.`)
+}
+
 // Wfolio's core Polina layout/theme rules were emitted as inline <style> blocks,
 // while the linked vendor stylesheet mostly contains shared/vendor assets such as icons.
-// Preserve the inline rules verbatim in a root-level CSS file. Keeping the CSS at the
-// publish root also preserves its original relative url(assets/...) semantics.
+// Preserve the inline rules in a root-level CSS file, but replace the archived Google
+// Fonts URLs with local files from the exact same Oswald v49 release. Keeping the CSS at
+// the publish root also preserves its original relative url(assets/...) semantics.
 const legacyHome = await readFile(path.join(ROOT, 'legacy-source', 'index.html'), 'utf8')
-const inlineStyles = [...legacyHome.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gi)]
+let inlineStyles = [...legacyHome.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gi)]
   .map((match) => match[1])
   .join('\n\n')
 
@@ -33,10 +86,23 @@ if (!inlineStyles.trim()) {
   throw new Error('Could not extract legacy Wfolio inline theme CSS')
 }
 
+for (const filename of oswaldV49Files) {
+  const remoteUrl = `${oswaldRemoteBase}${filename}`
+  if (!inlineStyles.includes(remoteUrl)) {
+    throw new Error(`Archived Oswald v49 source is missing from legacy CSS: ${filename}`)
+  }
+  inlineStyles = inlineStyles.replaceAll(remoteUrl, `${oswaldLocalBase}${filename}`)
+}
+
+if (/fonts\.(?:gstatic|googleapis)\.com/i.test(inlineStyles)) {
+  throw new Error('External Google Fonts reference remains in generated legacy CSS')
+}
+
 await writeFile(
   path.join(DIST, 'legacy-theme.css'),
-  `/* Extracted from the archived Wfolio page for React fidelity. */\n${inlineStyles}\n`,
+  `/* Extracted from the archived Wfolio page for React fidelity; Oswald v49 is self-hosted. */\n${inlineStyles}\n`,
 )
+await selfHostArchivedOswald()
 
 // Ship only the legacy assets that the React shell and retained CSS can still use.
 // The archived Wfolio runtime JS, builder resources, locale flags, and unrelated assets
@@ -81,5 +147,5 @@ async function walk(directory) {
 }
 await walk(DIST)
 console.log(
-  `React dist size: ${(total / 1024 / 1024).toFixed(1)} MiB; copied ${manifest.length} selected media assets and ${runtimeAssets.length} runtime assets.`,
+  `React dist size: ${(total / 1024 / 1024).toFixed(1)} MiB; copied ${manifest.length} selected media assets, ${runtimeAssets.length} runtime assets, and ${oswaldV49Files.length} self-hosted Oswald files.`,
 )
