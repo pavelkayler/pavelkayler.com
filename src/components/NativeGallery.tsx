@@ -1,16 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { GalleryPhoto } from '../generated/structured'
+import type { GalleryPhoto } from '../content/types'
 import { resolveAsset, StructuredImage } from './StructuredImage'
-
-type MasonryInstance = {
-  layout?: () => void
-  destroy?: () => void
-}
-
-type LightboxInstance = {
-  init: () => void
-  destroy: () => void
-}
 
 export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly GalleryPhoto[] }) {
   const galleryRef = useRef<HTMLDivElement>(null)
@@ -19,31 +9,27 @@ export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly Ga
     const gallery = galleryRef.current
     if (!gallery) return
 
-    let masonry: MasonryInstance | null = null
-    let lightbox: LightboxInstance | null = null
+    let masonry: { layout?: () => void; destroy?: () => void } | null = null
+    let lightbox: { init: () => void; destroy: () => void } | null = null
     let observer: IntersectionObserver | null = null
     let frameA = 0
     let frameB = 0
     let initialized = false
-    let disposed = false
+    let cancelled = false
 
     const initialize = () => {
-      if (initialized) return
+      if (initialized || cancelled) return
       initialized = true
 
       frameA = requestAnimationFrame(() => {
         frameB = requestAnimationFrame(async () => {
-          if (!gallery.isConnected || disposed) return
+          if (!gallery.isConnected || cancelled) return
 
-          // Neither Masonry nor the PhotoSwipe controller is needed to paint a route.
-          // Load them only when the gallery approaches the viewport so the initial SPA
-          // bundle and the navigation main-thread task stay small.
           const [{ default: Masonry }, { default: PhotoSwipeLightbox }] = await Promise.all([
             import('masonry-layout'),
             import('photoswipe/lightbox'),
           ])
-
-          if (!gallery.isConnected || disposed) return
+          if (!gallery.isConnected || cancelled) return
 
           masonry = new Masonry(gallery, {
             itemSelector: '.piece',
@@ -82,7 +68,7 @@ export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly Ga
     }
 
     return () => {
-      disposed = true
+      cancelled = true
       observer?.disconnect()
       cancelAnimationFrame(frameA)
       cancelAnimationFrame(frameB)

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { load } from 'cheerio'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE = path.join(ROOT, 'legacy-source')
-const OUT = path.join(ROOT, 'src', 'generated', 'structured.ts')
+const OUT_DIR = path.join(ROOT, 'src', 'generated', 'content')
 
 const routeMap = new Map([
   ['index.html', '/'], ['./index.html', '/'],
@@ -17,15 +17,10 @@ const routeMap = new Map([
   ['contacts.html', '/contacts'], ['./contacts.html', '/contacts'],
 ])
 
-function cleanText(value = '') {
-  return value.replace(/\s+/g, ' ').trim()
-}
-
+function cleanText(value = '') { return value.replace(/\s+/g, ' ').trim() }
 function localize(value = '') {
   value = value.trim().replace(/^\//, '')
-  return /^(?:i\.wfolio\.ru|static\.wfolio\.ru|vp\.wfolio\.ru|assets)\//.test(value)
-    ? `__BASE__${value}`
-    : value
+  return /^(?:i\.wfolio\.ru|static\.wfolio\.ru|vp\.wfolio\.ru|assets)\//.test(value) ? `__BASE__${value}` : value
 }
 
 function selectSrcset(raw = '') {
@@ -34,25 +29,19 @@ function selectSrcset(raw = '') {
     return match ? { src: match[1], width: Number(match[2]) } : null
   }).filter(Boolean)
   if (!candidates.length) return ''
-
   const wanted = [440, 600, 1240, 1880, 2520]
   const selected = []
   for (const target of wanted) {
-    const candidate = candidates.reduce((best, current) =>
-      Math.abs(current.width - target) < Math.abs(best.width - target) ? current : best
-    )
+    const candidate = candidates.reduce((best, current) => Math.abs(current.width - target) < Math.abs(best.width - target) ? current : best)
     if (!selected.some((item) => item.src === candidate.src)) selected.push(candidate)
   }
-  return selected.sort((a, b) => a.width - b.width)
-    .map(({ src, width }) => `${localize(src)} ${width}w`).join(', ')
+  return selected.sort((a, b) => a.width - b.width).map(({ src, width }) => `${localize(src)} ${width}w`).join(', ')
 }
 
 function imageData($, lazy) {
   const image = lazy.find('img').first()
   const placeholder = lazy.find('canvas.placeholder').first()
   const style = placeholder.attr('style') || ''
-  const color = style.match(/background-color:\s*([^;]+)/i)?.[1]?.trim() || '#222'
-
   return {
     src: localize(image.attr('data-src') || image.attr('src') || ''),
     srcSet: selectSrcset(image.attr('data-srcset') || image.attr('srcset') || ''),
@@ -62,7 +51,7 @@ function imageData($, lazy) {
     aspect: Number(lazy.attr('data-aspect') || 1),
     placeholderWidth: Number(placeholder.attr('width') || lazy.attr('data-width') || 1),
     placeholderHeight: Number(placeholder.attr('height') || lazy.attr('data-height') || 1),
-    placeholderColor: color,
+    placeholderColor: style.match(/background-color:\s*([^;]+)/i)?.[1]?.trim() || '#222',
   }
 }
 
@@ -71,29 +60,16 @@ function listingCards($, root) {
     const item = $(element)
     const link = item.find('a.listing-link').first()
     const href = link.attr('href') || '/'
-    return {
-      to: routeMap.get(href) || href,
-      title: cleanText(item.find('.listing-title').text()),
-      image: imageData($, item.find('.lazy-image').first()),
-    }
+    return { to: routeMap.get(href) || href, title: cleanText(item.find('.listing-title').text()), image: imageData($, item.find('.lazy-image').first()) }
   }).get()
 }
 
 function galleryPhoto($, element) {
   const piece = $(element)
   const link = piece.find('a.js-gallery-link').first()
-  const rawVersions = link.attr('data-gallery-versions') || '[]'
   let versions = []
-  try {
-    versions = JSON.parse(rawVersions)
-  } catch (error) {
-    console.warn(`Could not parse gallery versions for ${piece.attr('id')}:`, error)
-  }
-
-  const best = versions
-    .filter((item) => item?.src && item?.w && item?.h)
-    .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
-
+  try { versions = JSON.parse(link.attr('data-gallery-versions') || '[]') } catch (error) { console.warn(`Could not parse gallery versions for ${piece.attr('id')}:`, error) }
+  const best = versions.filter((item) => item?.src && item?.w && item?.h).sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
   const preview = imageData($, piece.find('.lazy-image').first())
   return {
     id: piece.attr('id') || `piece-${Math.random().toString(36).slice(2)}`,
@@ -114,15 +90,10 @@ async function parseAlbum(file, key) {
   const gallery = $('.album-masonry.js-gallery').first()
   const postfix = $('.-album-postfix').first()
   const relatedContainer = $('.listing.js-listing').last()
-
   return {
     key,
     hasCover: cover.length > 0,
-    cover: cover.length > 0 ? {
-      title: cleanText(cover.find('.cover-content h1').first().text()),
-      poster: localize(video.attr('poster') || ''),
-      videoSrc: localize(source.attr('src') || ''),
-    } : null,
+    cover: cover.length > 0 ? { title: cleanText(cover.find('.cover-content h1').first().text()), poster: localize(video.attr('poster') || ''), videoSrc: localize(source.attr('src') || '') } : null,
     photos: gallery.find('.piece.-photo').map((_, element) => galleryPhoto($, element)).get(),
     quote: postfix.find('blockquote p').map((_, element) => cleanText($(element).text())).get(),
     related: listingCards($, relatedContainer),
@@ -134,50 +105,27 @@ async function parseHome() {
   const $ = load(html, { decodeEntities: false })
   const cover = $('.cover').first()
   const main = $('main.page-main').first()
-
   const slides = cover.find('.slider .slide .lazy-image').map((_, element) => imageData($, $(element))).get()
-
   const pictureRows = main.find('.sections-container').map((_, element) => {
     const container = $(element)
     const pictureSections = container.find('.picture-section')
     if (!pictureSections.length) return null
-
     const columns = container.find('.row').first().children().map((_, columnElement) => {
       const column = $(columnElement)
       const section = column.find('.picture-section').first()
       if (!section.length) return null
-      return {
-        columnClass: column.attr('class') || 'col-sm-12',
-        sectionClass: section.attr('class') || 'section-container picture-section -default',
-        image: imageData($, section.find('.lazy-image').first()),
-      }
+      return { columnClass: column.attr('class') || 'col-sm-12', sectionClass: section.attr('class') || 'section-container picture-section -default', image: imageData($, section.find('.lazy-image').first()) }
     }).get().filter(Boolean)
-
-    return {
-      containerClass: container.attr('class') || 'sections-container -medium-width',
-      columns,
-    }
+    return { containerClass: container.attr('class') || 'sections-container -medium-width', columns }
   }).get().filter(Boolean)
-
   const actions = main.find('.action-section a.button').map((_, element) => {
     const link = $(element)
     let href = link.attr('href') || '#'
     if (href === 'https://t.me/pavekayler') href = 'https://t.me/pavelkayler'
-    return {
-      columnClass: link.closest('[class*="col-"]').attr('class') || 'col-sm-12',
-      href,
-      label: cleanText(link.text()),
-      iconClass: link.find('i').attr('class') || '',
-    }
+    return { columnClass: link.closest('[class*="col-"]').attr('class') || 'col-sm-12', href, label: cleanText(link.text()), iconClass: link.find('i').attr('class') || '' }
   }).get()
-
   return {
-    cover: {
-      title: cleanText(cover.find('.cover-content h1').text()),
-      subtitle: cleanText(cover.find('.cover-content p').text()),
-      delay: Number(cover.find('.slider').attr('data-delay') || 4000),
-      slides,
-    },
+    cover: { title: cleanText(cover.find('.cover-content h1').text()), subtitle: cleanText(cover.find('.cover-content p').text()), delay: Number(cover.find('.slider').attr('data-delay') || 4000), slides },
     pictureRows,
     works: listingCards($, main.find('.inline-listing-section .listing').first()),
     actions,
@@ -185,42 +133,55 @@ async function parseHome() {
   }
 }
 
+function prefetchImage(image, sizes) { return { src: image.src, srcSet: image.srcSet, sizes } }
+function albumPrefetch(album) {
+  const result = []
+  if (album.cover?.poster) result.push({ src: album.cover.poster, srcSet: '', sizes: '100vw' })
+  result.push(...album.photos.map((photo) => prefetchImage(photo.image, '(max-width: 768px) 50vw, 33vw')))
+  return result.slice(0, 6)
+}
+
+await mkdir(OUT_DIR, { recursive: true })
+
 const worksHtml = await readFile(path.join(SOURCE, 'works.html'), 'utf8')
 const $works = load(worksHtml, { decodeEntities: false })
 const logoImage = $works('.logo .logo-image').first()
-
-const siteLogo = {
-  src: localize(logoImage.attr('data-src') || logoImage.attr('src') || ''),
-  alt: logoImage.attr('alt') || 'pavelkayler.com',
-  maxWidth: 209,
-  maxHeight: 35,
-}
-
-const worksCards = listingCards($works, $works('.listing.js-listing').first())
-const worksQuote = $works('.-listing-postfix blockquote p').map((_, element) => cleanText($works(element).text())).get()
+const siteLogo = { src: localize(logoImage.attr('data-src') || logoImage.attr('src') || ''), alt: logoImage.attr('alt') || 'pavelkayler.com', maxWidth: 209, maxHeight: 35 }
+const worksContent = { cards: listingCards($works, $works('.listing.js-listing').first()), quote: $works('.-listing-postfix blockquote p').map((_, element) => cleanText($works(element).text())).get() }
 
 const contactsHtml = await readFile(path.join(SOURCE, 'contacts.html'), 'utf8')
 const $contacts = load(contactsHtml, { decodeEntities: false })
-const contactImageNode = $contacts('.picture-section .lazy-image').first()
 const contactText = $contacts('.text-section').filter((_, element) => $contacts(element).find('h1').length > 0).first()
 const contactAction = $contacts('.action-section a.button').first()
-
-const contacts = {
-  image: imageData($contacts, contactImageNode),
-  heading: cleanText(contactText.find('h1').text()),
-  text: cleanText(contactText.find('p').first().text()),
-  actionHref: contactAction.attr('href') || 'https://t.me/pavelkayler',
-  actionLabel: cleanText(contactAction.text()),
+const contactsContent = {
+  image: imageData($contacts, $contacts('.picture-section .lazy-image').first()),
+  heading: cleanText(contactText.find('h1').text()), text: cleanText(contactText.find('p').first().text()),
+  actionHref: contactAction.attr('href') || 'https://t.me/pavelkayler', actionLabel: cleanText(contactAction.text()),
 }
 
-const albums = {
-  portraits: await parseAlbum('portraits.html', 'portraits'),
-  projects: await parseAlbum('projects.html', 'projects'),
-  brands: await parseAlbum('brands.html', 'brands'),
+const portraits = await parseAlbum('portraits.html', 'portraits')
+const projects = await parseAlbum('projects.html', 'projects')
+const brands = await parseAlbum('brands.html', 'brands')
+const homeContent = await parseHome()
+
+const routePrefetch = {
+  home: [...homeContent.cover.slides.map((image) => prefetchImage(image, '100vw')), ...homeContent.pictureRows.flatMap((row) => row.columns.map((column) => prefetchImage(column.image, row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw')))].slice(0, 6),
+  works: worksContent.cards.map((card) => prefetchImage(card.image, '(max-width: 768px) 100vw, 33vw')).slice(0, 6),
+  portraits: albumPrefetch(portraits), projects: albumPrefetch(projects), brands: albumPrefetch(brands),
+  contacts: [prefetchImage(contactsContent.image, '(max-width: 768px) 100vw, 33vw')],
 }
-const home = await parseHome()
 
-const output = `// AUTO-GENERATED from legacy-source. Do not edit directly.\n\nexport interface StructuredImage {\n  src: string\n  srcSet: string\n  alt: string\n  width: number\n  height: number\n  aspect: number\n  placeholderWidth: number\n  placeholderHeight: number\n  placeholderColor: string\n}\n\nexport interface WorksCard {\n  to: string\n  title: string\n  image: StructuredImage\n}\n\nexport interface GalleryPhoto {\n  id: string\n  aspect: number\n  image: StructuredImage\n  fullscreenSrc: string\n  fullscreenWidth: number\n  fullscreenHeight: number\n}\n\nexport interface AlbumCover {\n  title: string\n  poster: string\n  videoSrc: string\n}\n\nexport interface AlbumContent {\n  key: 'portraits' | 'projects' | 'brands'\n  hasCover: boolean\n  cover: AlbumCover | null\n  photos: GalleryPhoto[]\n  quote: string[]\n  related: WorksCard[]\n}\n\nexport interface HomePictureColumn {\n  columnClass: string\n  sectionClass: string\n  image: StructuredImage\n}\n\nexport interface HomePictureRow {\n  containerClass: string\n  columns: HomePictureColumn[]\n}\n\nexport interface HomeAction {\n  columnClass: string\n  href: string\n  label: string\n  iconClass: string\n}\n\nexport interface HomeContent {\n  cover: { title: string; subtitle: string; delay: number; slides: StructuredImage[] }\n  pictureRows: HomePictureRow[]\n  works: WorksCard[]\n  actions: HomeAction[]\n  quote: string[]\n}\n\nexport const siteLogo = ${JSON.stringify(siteLogo, null, 2)} as const\n\nexport const worksContent = ${JSON.stringify({ cards: worksCards, quote: worksQuote }, null, 2)} as const\n\nexport const contactsContent = ${JSON.stringify(contacts, null, 2)} as const\n\nexport const albums: Record<'portraits' | 'projects' | 'brands', AlbumContent> = ${JSON.stringify(albums, null, 2)}\n\nexport const homeContent: HomeContent = ${JSON.stringify(home, null, 2)}\n`
+const typeImport = "import type { AlbumContent, ContactsContent, HomeContent, SiteLogoData, WorksContent } from '../../content/types'\n"
+await Promise.all([
+  writeFile(path.join(OUT_DIR, 'site.ts'), `// AUTO-GENERATED.\n${typeImport}export const siteLogo: SiteLogoData = ${JSON.stringify(siteLogo, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'home.ts'), `// AUTO-GENERATED.\n${typeImport}export const homeContent: HomeContent = ${JSON.stringify(homeContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'works.ts'), `// AUTO-GENERATED.\n${typeImport}export const worksContent: WorksContent = ${JSON.stringify(worksContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'contacts.ts'), `// AUTO-GENERATED.\n${typeImport}export const contactsContent: ContactsContent = ${JSON.stringify(contactsContent, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'portraits.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(portraits, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'projects.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(projects, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'brands.ts'), `// AUTO-GENERATED.\n${typeImport}export const album: AlbumContent = ${JSON.stringify(brands, null, 2)}\n`),
+  writeFile(path.join(OUT_DIR, 'prefetch.ts'), `// AUTO-GENERATED.\nimport type { PageKey } from '../pages'\nexport interface PrefetchImageSpec { src: string; srcSet: string; sizes: string }\nexport const routePrefetch: Record<PageKey, PrefetchImageSpec[]> = ${JSON.stringify(routePrefetch, null, 2)}\n`),
+])
 
-await writeFile(OUT, output)
-console.log(`Generated native React data: works=${worksCards.length}, home slides=${home.cover.slides.length}, home picture rows=${home.pictureRows.length}, portraits=${albums.portraits.photos.length}, projects=${albums.projects.photos.length}, brands=${albums.brands.photos.length}.`)
+await rm(path.join(ROOT, 'src', 'generated', 'structured.ts'), { force: true })
+console.log(`Generated split React data: works=${worksContent.cards.length}, home slides=${homeContent.cover.slides.length}, portraits=${portraits.photos.length}, projects=${projects.photos.length}, brands=${brands.photos.length}.`)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { HomeContent } from '../generated/structured'
-import { SiteLogo } from './SiteLogo'
+import type { HomeContent } from '../content/types'
+import { LogoSpacer } from './LogoSpacer'
 import { StructuredImage } from './StructuredImage'
 
 export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
@@ -50,9 +50,7 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
       </div>
 
       <div className="cover-wrapper js-cover-wrapper -has-arrows">
-        <div className="cover-header -medium">
-          <SiteLogo />
-        </div>
+        <LogoSpacer coverSize="medium" />
         <div className="cover-content">
           <h1 className="cover-header -medium">{cover.title}</h1>
           <p>{cover.subtitle}</p>

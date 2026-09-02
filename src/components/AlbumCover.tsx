@@ -1,6 +1,6 @@
-import type { AlbumCover as AlbumCoverData } from '../generated/structured'
+import type { AlbumCover as AlbumCoverData } from '../content/types'
 import { resolveAsset } from './StructuredImage'
-import { SiteLogo } from './SiteLogo'
+import { LogoSpacer } from './LogoSpacer'
 
 export function AlbumCover({ cover }: { cover: AlbumCoverData }) {
   return (
@@ -21,9 +21,7 @@ export function AlbumCover({ cover }: { cover: AlbumCoverData }) {
       )}
 
       <div className="cover-wrapper js-cover-wrapper">
-        <div className="cover-header -small">
-          <SiteLogo />
-        </div>
+        <LogoSpacer coverSize="small" />
         <div className="cover-content">
           <h1 className="cover-header -small">{cover.title}</h1>
         </div>

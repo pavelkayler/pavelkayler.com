@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { siteLogo } from '../generated/structured'
+import { siteLogo } from '../generated/content/site'
 import { resolveAsset } from './StructuredImage'
 
 export function SiteLogo() {

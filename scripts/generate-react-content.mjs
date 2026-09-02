@@ -44,19 +44,13 @@ function selectSrcset(raw) {
   }).filter(Boolean)
   if (!candidates.length) return ''
 
-  // Keep this list in sync with generate-structured-content.mjs. The first target
-  // resolves to Wfolio's 440/480px candidate and avoids serving a 600/640px image
-  // unnecessarily on narrow mobile viewports.
   const wanted = [440, 600, 1240, 1880, 2520]
   const selected = []
   for (const target of wanted) {
-    const candidate = candidates.reduce((best, current) =>
-      Math.abs(current.width - target) < Math.abs(best.width - target) ? current : best
-    )
+    const candidate = candidates.reduce((best, current) => Math.abs(current.width - target) < Math.abs(best.width - target) ? current : best)
     if (!selected.some((item) => item.src === candidate.src)) selected.push(candidate)
   }
-  return selected.sort((a, b) => a.width - b.width)
-    .map(({ src, width }) => `${localize(src)} ${width}w`).join(', ')
+  return selected.sort((a, b) => a.width - b.width).map(({ src, width }) => `${localize(src)} ${width}w`).join(', ')
 }
 
 function scanPageAssets($, root) {
@@ -64,7 +58,6 @@ function scanPageAssets($, root) {
     const node = $(element)
     const source = node.attr('data-src') || node.attr('src')
     if (source && isLocalAsset(source)) node.attr('src', localize(source))
-
     const srcset = selectSrcset(node.attr('data-srcset') || node.attr('srcset'))
     if (srcset) node.attr('srcset', srcset)
   })
@@ -75,8 +68,7 @@ function scanPageAssets($, root) {
     if (!raw) return
     try {
       const versions = JSON.parse(raw)
-      const best = versions.filter((item) => item?.src && item?.w && item?.h)
-        .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
+      const best = versions.filter((item) => item?.src && item?.w && item?.h).sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
       if (best) node.attr('href', localize(best.src))
     } catch (error) {
       console.warn('Could not parse gallery versions:', error)
@@ -98,9 +90,7 @@ function scanPageAssets($, root) {
   root.find('[style]').each((_, element) => {
     const node = $(element)
     const style = node.attr('style') || ''
-    node.attr('style', style.replace(/url\(["']?([^"')]+)["']?\)/g, (full, url) => {
-      return isLocalAsset(url) ? `url(${localize(url)})` : full
-    }))
+    node.attr('style', style.replace(/url\(["']?([^"')]+)["']?\)/g, (full, url) => isLocalAsset(url) ? `url(${localize(url)})` : full))
   })
 }
 
@@ -115,12 +105,7 @@ for (const [key, file, routePath] of pageDefs) {
   const main = $('main.page-main').first()
   if (cover.length) wrapper.append(cover.clone())
   if (main.length) wrapper.append(main.clone())
-
   scanPageAssets($, wrapper)
-
-  const scannedHtml = wrapper.html() || ''
-  const localMatches = scannedHtml.match(/__BASE__((?:i\.wfolio\.ru|static\.wfolio\.ru|vp\.wfolio\.ru|assets)\/[^\s"'<>)]+)/g) || []
-  const prefetchAssets = [...new Set(localMatches.map((value) => value.replace('__BASE__', '')))].slice(0, 6)
 
   pages[key] = {
     key,
@@ -129,11 +114,10 @@ for (const [key, file, routePath] of pageDefs) {
     description: $('meta[name="description"]').attr('content') || '',
     bodyClass: $('body').attr('class') || 'theme-polina',
     hasCover: cover.length > 0,
-    prefetchAssets,
   }
 }
 
-const ts = `// AUTO-GENERATED. Do not edit directly.\nexport type PageKey = 'home' | 'works' | 'portraits' | 'projects' | 'brands' | 'contacts'\nexport interface GeneratedPage {\n  key: PageKey\n  path: string\n  title: string\n  description: string\n  bodyClass: string\n  hasCover: boolean\n  prefetchAssets: string[]\n}\nexport const pages: Record<PageKey, GeneratedPage> = ${JSON.stringify(pages, null, 2)}\n`
+const ts = `// AUTO-GENERATED. Do not edit directly.\nexport type PageKey = 'home' | 'works' | 'portraits' | 'projects' | 'brands' | 'contacts'\nexport interface GeneratedPage {\n  key: PageKey\n  path: string\n  title: string\n  description: string\n  bodyClass: string\n  hasCover: boolean\n}\nexport const pages: Record<PageKey, GeneratedPage> = ${JSON.stringify(pages, null, 2)}\n`
 await writeFile(path.join(OUT, 'pages.ts'), ts)
 await writeFile(path.join(OUT, 'asset-manifest.json'), JSON.stringify([...assets].sort(), null, 2) + '\n')
 console.log(`Generated ${Object.keys(pages).length} React route metadata entries; ${assets.size} localized assets selected.`)

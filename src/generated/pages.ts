@@ -7,6 +7,5 @@ export interface GeneratedPage {
   description: string
   bodyClass: string
   hasCover: boolean
-  prefetchAssets: string[]
 }
 export const pages = {} as Record<PageKey, GeneratedPage>

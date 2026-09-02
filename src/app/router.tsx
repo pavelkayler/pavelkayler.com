@@ -1,9 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { MainLayout } from '../layouts/MainLayout'
 import { HomePage } from '../pages/HomePage'
-import { WorksPage } from '../pages/WorksPage'
-import { ContactsPage } from '../pages/ContactsPage'
-import { GalleryPage } from '../pages/GalleryPage'
+import { lazyRoute } from './routeModules'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 
@@ -13,11 +11,11 @@ export const router = createBrowserRouter(
       element: <MainLayout />,
       children: [
         { index: true, element: <HomePage /> },
-        { path: 'works', element: <WorksPage /> },
-        { path: 'portraits', element: <GalleryPage pageKey="portraits" /> },
-        { path: 'projects', element: <GalleryPage pageKey="projects" /> },
-        { path: 'brands', element: <GalleryPage pageKey="brands" /> },
-        { path: 'contacts', element: <ContactsPage /> },
+        { path: 'works', lazy: lazyRoute('works') },
+        { path: 'portraits', lazy: lazyRoute('portraits') },
+        { path: 'projects', lazy: lazyRoute('projects') },
+        { path: 'brands', lazy: lazyRoute('brands') },
+        { path: 'contacts', lazy: lazyRoute('contacts') },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },

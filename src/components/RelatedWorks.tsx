@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { prefetchRoute } from '../app/prefetch'
-import type { WorksCard } from '../generated/structured'
+import type { WorksCard } from '../content/types'
 import { StructuredImage } from './StructuredImage'
 
 export function RelatedWorks({ cards }: { cards: WorksCard[] | readonly WorksCard[] }) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { StructuredImage as StructuredImageData } from '../generated/structured'
+import type { StructuredImage as StructuredImageData } from '../content/types'
 
 export function resolveAsset(value: string) {
   return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
