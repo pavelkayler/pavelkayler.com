@@ -1,5 +1,5 @@
-# Preview revision: responsive-mobile-2026-09-02
-name: Publish Wfolio migration preview
+# Preview revision: react-v2-2026-09-02
+name: Publish React V2 preview
 
 on:
   push:
@@ -24,35 +24,37 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Check out migration branch
+      - name: Check out React V2 branch
         uses: actions/checkout@v6
         with:
-          ref: wfolio-migration
+          ref: react-v2
 
-      - name: Validate standalone migration
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React SPA
+        env:
+          VITE_BASE_PATH: /pavelkayler.com/
+        run: npm run build
+
+      - name: Validate React SPA output
         run: |
-          python3 scripts/validate_migration.py
-          python3 scripts/validate_responsive.py
+          test -f dist/index.html
+          test -f dist/404.html
+          test -d dist/_app
+          ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
+          echo "React SPA output is valid"
+          du -sh dist
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Prepare publish-only directory
-        run: |
-          mkdir -p _site
-          cp index.html works.html portraits.html projects.html brands.html contacts.html favicon.ico robots.txt sitemap.xml .nojekyll _site/
-          cp -a assets i.wfolio.ru _site/
-
-          for dir in static.wfolio.ru vp.wfolio.ru mc.yandex.ru; do
-            if [ -d "$dir" ]; then
-              cp -a "$dir" _site/
-            fi
-          done
-
-          echo "Preview size before optimization:"
-          du -sh _site
-
-      - name: Optimize preview images for Pages limit
+      - name: Keep Pages preview below site-size limit
         run: |
           python3 -m pip install --disable-pip-version-check --quiet pillow
           python3 - <<'PY'
@@ -60,7 +62,7 @@ jobs:
           from PIL import Image, ImageOps
           import os
 
-          root = Path("_site")
+          root = Path("dist")
           target = 850 * 1024 * 1024
 
           def tree_size():
@@ -118,28 +120,24 @@ jobs:
               print(f"pass max_dim={max_dim} quality={quality}: changed={changed}, size={tree_size()/1024/1024:.1f} MiB")
 
           start = tree_size()
-          print(f"Starting preview size: {start/1024/1024:.1f} MiB")
-
+          print(f"Starting React preview size: {start/1024/1024:.1f} MiB")
           if start > target:
-              run_pass(max_dim=2560, quality=82, min_size=900 * 1024)
+              run_pass(max_dim=2560, quality=84, min_size=900 * 1024)
           if tree_size() > target:
-              run_pass(max_dim=2200, quality=76, min_size=500 * 1024)
+              run_pass(max_dim=2200, quality=80, min_size=500 * 1024)
           if tree_size() > target:
-              run_pass(max_dim=1920, quality=72, min_size=0)
+              run_pass(max_dim=1920, quality=76, min_size=0)
 
           final = tree_size()
-          print(f"Final preview size: {final/1024/1024:.1f} MiB")
+          print(f"Final React preview size: {final/1024/1024:.1f} MiB")
           if final > target:
-              raise SystemExit(f"Preview is still too large: {final} bytes > {target} bytes")
+              raise SystemExit(f"React preview is still too large: {final} bytes > {target} bytes")
           PY
-
-          echo "Preview size after optimization:"
-          du -sh _site
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./_site
+          path: ./dist
 
   deploy:
     needs: build
