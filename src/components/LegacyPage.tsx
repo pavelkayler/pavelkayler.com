@@ -30,6 +30,18 @@ function updateCanonical(path: string) {
   link.href = `https://pavelkayler.com${path}`
 }
 
+function afterFirstPaint(callback: () => void) {
+  let secondFrame = 0
+  const firstFrame = requestAnimationFrame(() => {
+    secondFrame = requestAnimationFrame(callback)
+  })
+
+  return () => {
+    cancelAnimationFrame(firstFrame)
+    if (secondFrame) cancelAnimationFrame(secondFrame)
+  }
+}
+
 export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
   const page = pages[pageKey]
   const html = useMemo(() => withBase(page.html), [page.html])
@@ -74,61 +86,128 @@ export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
     root.addEventListener('focusin', onPrefetch)
     root.addEventListener('pointerdown', onPrefetch)
 
-    // Keep the original Wfolio colour/aspect placeholders visible immediately and only
-    // fade the real bitmap in after the browser has decoded it. This removes the blank
-    // flash that made first-time route changes feel blocked by image loading.
-    root.querySelectorAll<HTMLImageElement>('.lazy-image img').forEach((image) => {
+    // One delegated listener replaces two listeners per image. Large portfolio routes can
+    // contain hundreds of images, so this removes a sizeable amount of synchronous work
+    // from the first route commit while keeping the instant Wfolio colour placeholders.
+    const revealImage = (image: HTMLImageElement) => {
       const container = image.closest<HTMLElement>('.lazy-image')
-      if (!container) return
+      if (!container || container.classList.contains('is-loaded')) return
 
-      const reveal = () => {
-        const markLoaded = () => container.classList.add('is-loaded')
-        if (typeof image.decode === 'function') image.decode().catch(() => undefined).finally(markLoaded)
-        else markLoaded()
-      }
+      const markLoaded = () => container.classList.add('is-loaded')
+      if (typeof image.decode === 'function') image.decode().catch(() => undefined).finally(markLoaded)
+      else markLoaded()
+    }
 
-      if (image.complete && image.naturalWidth > 0) reveal()
-      else {
-        image.addEventListener('load', reveal, { once: true })
-        image.addEventListener('error', () => container.classList.add('is-loaded'), { once: true })
+    const onImageLoad = (event: Event) => {
+      if (event.target instanceof HTMLImageElement && event.target.matches('.lazy-image img')) {
+        revealImage(event.target)
       }
+    }
+
+    const onImageError = (event: Event) => {
+      if (!(event.target instanceof HTMLImageElement) || !event.target.matches('.lazy-image img')) return
+      event.target.closest<HTMLElement>('.lazy-image')?.classList.add('is-loaded')
+    }
+
+    root.addEventListener('load', onImageLoad, true)
+    root.addEventListener('error', onImageError, true)
+
+    // Cached images may finish before React effects are attached. Only those need an
+    // immediate pass; uncached images are handled by the delegated listener above.
+    root.querySelectorAll<HTMLImageElement>('.lazy-image img').forEach((image) => {
+      if (image.complete && image.naturalWidth > 0) revealImage(image)
     })
 
     const lightboxes: PhotoSwipeLightbox[] = []
-    root.querySelectorAll<HTMLElement>('.js-gallery').forEach((gallery) => {
-      const lightbox = new PhotoSwipeLightbox({
-        gallery,
-        children: 'a.js-gallery-link',
-        pswpModule: () => import('photoswipe'),
-        bgOpacity: 0.96,
-        preload: [1, 2],
-        wheelToZoom: true,
-        showHideAnimationType: 'fade',
+    const cancelLightboxInit = afterFirstPaint(() => {
+      root.querySelectorAll<HTMLElement>('.js-gallery').forEach((gallery) => {
+        const lightbox = new PhotoSwipeLightbox({
+          gallery,
+          children: 'a.js-gallery-link',
+          pswpModule: () => import('photoswipe'),
+          bgOpacity: 0.96,
+          preload: [1, 2],
+          wheelToZoom: true,
+          showHideAnimationType: 'fade',
+        })
+        lightbox.init()
+        lightboxes.push(lightbox)
       })
-      lightbox.init()
-      lightboxes.push(lightbox)
     })
 
-    const masonryInstances: Masonry[] = []
-    root.querySelectorAll<HTMLElement>('.album-masonry').forEach((container) => {
-      const masonry = new Masonry(container, {
-        itemSelector: '.piece',
-        percentPosition: true,
-        transitionDuration: 0,
+    // Masonry used to initialise every gallery synchronously and run layout again for
+    // every image load. Wfolio placeholders already preserve the final image geometry,
+    // so one layout is sufficient. Below-the-fold galleries are initialised only when
+    // they approach the viewport, keeping route transitions responsive.
+    const masonryInstances = new Map<HTMLElement, Masonry>()
+    const pendingMasonryFrames = new Set<number>()
+
+    const initMasonry = (container: HTMLElement) => {
+      if (masonryInstances.has(container) || !container.isConnected) return
+
+      const frame = requestAnimationFrame(() => {
+        pendingMasonryFrames.delete(frame)
+        if (!container.isConnected || masonryInstances.has(container)) return
+
+        const masonry = new Masonry(container, {
+          itemSelector: '.piece',
+          percentPosition: true,
+          transitionDuration: 0,
+        })
+        masonryInstances.set(container, masonry)
+        masonry.layout?.()
       })
-      masonryInstances.push(masonry)
-      container.querySelectorAll('img').forEach((image) => {
-        image.addEventListener('load', () => masonry.layout?.(), { once: true })
+      pendingMasonryFrames.add(frame)
+    }
+
+    const masonryContainers = Array.from(root.querySelectorAll<HTMLElement>('.album-masonry'))
+    let masonryObserver: IntersectionObserver | null = null
+
+    if ('IntersectionObserver' in window) {
+      masonryObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          const container = entry.target as HTMLElement
+          masonryObserver?.unobserve(container)
+          initMasonry(container)
+        })
+      }, {
+        rootMargin: '1200px 0px',
+        threshold: 0,
       })
-      requestAnimationFrame(() => masonry.layout?.())
-    })
+
+      masonryContainers.forEach((container) => masonryObserver?.observe(container))
+    } else {
+      const cancelFallbackMasonryInit = afterFirstPaint(() => {
+        masonryContainers.forEach(initMasonry)
+      })
+
+      return () => {
+        cancelFallbackMasonryInit()
+        root.removeEventListener('click', onClick)
+        root.removeEventListener('pointerover', onPrefetch)
+        root.removeEventListener('focusin', onPrefetch)
+        root.removeEventListener('pointerdown', onPrefetch)
+        root.removeEventListener('load', onImageLoad, true)
+        root.removeEventListener('error', onImageError, true)
+        cancelLightboxInit()
+        lightboxes.forEach((lightbox) => lightbox.destroy())
+        pendingMasonryFrames.forEach(cancelAnimationFrame)
+        masonryInstances.forEach((masonry) => masonry.destroy?.())
+      }
+    }
 
     return () => {
       root.removeEventListener('click', onClick)
       root.removeEventListener('pointerover', onPrefetch)
       root.removeEventListener('focusin', onPrefetch)
       root.removeEventListener('pointerdown', onPrefetch)
+      root.removeEventListener('load', onImageLoad, true)
+      root.removeEventListener('error', onImageError, true)
+      cancelLightboxInit()
       lightboxes.forEach((lightbox) => lightbox.destroy())
+      masonryObserver?.disconnect()
+      pendingMasonryFrames.forEach(cancelAnimationFrame)
       masonryInstances.forEach((masonry) => masonry.destroy?.())
     }
   }, [html, navigate])
