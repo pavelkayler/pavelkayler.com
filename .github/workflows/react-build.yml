@@ -58,5 +58,13 @@ jobs:
           ! grep -R "generated/structured" src --include='*.ts' --include='*.tsx' || exit 1
           ! grep -q "html: string" src/generated/pages.ts || exit 1
 
+          MAX_BYTES=$((850 * 1024 * 1024))
+          ACTUAL_BYTES=$(du -sb dist | cut -f1)
+          echo "Production size: $ACTUAL_BYTES bytes (budget: $MAX_BYTES bytes)"
+          if [ "$ACTUAL_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "React production exceeds the 850 MiB Pages budget"
+            exit 1
+          fi
+
           du -sh dist
           echo "React V2 split native build is valid"
