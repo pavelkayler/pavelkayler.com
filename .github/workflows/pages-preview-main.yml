@@ -1,4 +1,4 @@
-# Preview revision: navigation-instagram-gallery-2026-09-02
+# Preview revision: responsive-mobile-2026-09-02
 name: Publish Wfolio migration preview
 
 on:
@@ -30,7 +30,9 @@ jobs:
           ref: wfolio-migration
 
       - name: Validate standalone migration
-        run: python3 scripts/validate_migration.py
+        run: |
+          python3 scripts/validate_migration.py
+          python3 scripts/validate_responsive.py
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
