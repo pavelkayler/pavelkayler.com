@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Masonry from 'masonry-layout'
 import PhotoSwipeLightbox from 'photoswipe/lightbox'
 import { pages, type PageKey } from '../generated/pages'
+import { prefetchRoute } from '../app/prefetch'
 
 function withBase(value: string) {
   const base = import.meta.env.BASE_URL
@@ -48,16 +49,30 @@ export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
     const root = rootRef.current
     if (!root) return
 
-    const onClick = (event: MouseEvent) => {
-      const target = event.target as Element | null
-      const anchor = target?.closest<HTMLAnchorElement>('a[href]')
-      if (!anchor || anchor.classList.contains('js-gallery-link')) return
+    const findInternalAnchor = (target: EventTarget | null) => {
+      const element = target instanceof Element ? target : null
+      const anchor = element?.closest<HTMLAnchorElement>('a[href]')
+      if (!anchor || anchor.classList.contains('js-gallery-link')) return null
       const href = anchor.getAttribute('href') || ''
-      if (!href.startsWith('/')) return
-      event.preventDefault()
-      navigate(href)
+      return href.startsWith('/') ? { anchor, href } : null
     }
+
+    const onClick = (event: MouseEvent) => {
+      const internal = findInternalAnchor(event.target)
+      if (!internal) return
+      event.preventDefault()
+      navigate(internal.href)
+    }
+
+    const onPrefetch = (event: Event) => {
+      const internal = findInternalAnchor(event.target)
+      if (internal) prefetchRoute(internal.href)
+    }
+
     root.addEventListener('click', onClick)
+    root.addEventListener('pointerover', onPrefetch)
+    root.addEventListener('focusin', onPrefetch)
+    root.addEventListener('pointerdown', onPrefetch)
 
     const lightboxes: PhotoSwipeLightbox[] = []
     root.querySelectorAll<HTMLElement>('.js-gallery').forEach((gallery) => {
@@ -90,6 +105,9 @@ export function LegacyPage({ pageKey }: { pageKey: PageKey }) {
 
     return () => {
       root.removeEventListener('click', onClick)
+      root.removeEventListener('pointerover', onPrefetch)
+      root.removeEventListener('focusin', onPrefetch)
+      root.removeEventListener('pointerdown', onPrefetch)
       lightboxes.forEach((lightbox) => lightbox.destroy())
       masonryInstances.forEach((masonry) => masonry.destroy?.())
     }

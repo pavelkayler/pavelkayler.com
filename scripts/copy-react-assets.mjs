@@ -20,14 +20,21 @@ async function copyAsset(relativePath) {
   }
 }
 
-// Theme CSS/fonts/icons are small compared with the photography payload and are reused 1:1.
+// Theme CSS/fonts/icons are still reused during the fidelity-first React migration.
 await cp(path.join(ROOT, 'assets'), path.join(DIST, 'assets'), { recursive: true, force: true })
 await copyFile(path.join(ROOT, 'favicon.ico'), path.join(DIST, 'favicon.ico'))
 
 for (const asset of manifest) await copyAsset(asset)
 
-// GitHub Pages has no rewrite engine. Serving the SPA shell as 404 preserves BrowserRouter
-// for direct navigation to /works, /portraits, etc.
+// BrowserRouter on GitHub Pages: create actual index files for every public route so
+// direct navigation and refresh return HTTP 200 instead of relying on the 404 shell.
+for (const route of ['works', 'portraits', 'projects', 'brands', 'contacts']) {
+  const routeDir = path.join(DIST, route)
+  await mkdir(routeDir, { recursive: true })
+  await copyFile(path.join(DIST, 'index.html'), path.join(routeDir, 'index.html'))
+}
+
+// Keep a generic fallback as a safety net for unknown/deep links.
 await copyFile(path.join(DIST, 'index.html'), path.join(DIST, '404.html'))
 
 let total = 0

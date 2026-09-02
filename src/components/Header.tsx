@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { prefetchRoute } from '../app/prefetch'
 
 const socialLinks = [
   { href: 'https://t.me/pavelkayler', title: 'Telegram', icon: 'fab fa-telegram-plane' },
@@ -9,6 +10,21 @@ const socialLinks = [
 
 interface HeaderProps {
   overlay: boolean
+}
+
+function SpaLink({ to, children }: { to: string; children: string }) {
+  const prefetch = () => prefetchRoute(to)
+  return (
+    <NavLink
+      className="link"
+      to={to}
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
+      onPointerDown={prefetch}
+    >
+      {children}
+    </NavLink>
+  )
 }
 
 export function Header({ overlay }: HeaderProps) {
@@ -28,9 +44,9 @@ export function Header({ overlay }: HeaderProps) {
             </ul>
           </div>
           <ul className="menu-list js-menu-list">
-            <li className="menu-item js-menu-item"><NavLink className="link" to="/">HOME</NavLink></li>
-            <li className="menu-item js-menu-item"><NavLink className="link" to="/works">WORKS</NavLink></li>
-            <li className="menu-item js-menu-item"><NavLink className="link" to="/contacts">CONTACTS</NavLink></li>
+            <li className="menu-item js-menu-item"><SpaLink to="/">HOME</SpaLink></li>
+            <li className="menu-item js-menu-item"><SpaLink to="/works">WORKS</SpaLink></li>
+            <li className="menu-item js-menu-item"><SpaLink to="/contacts">CONTACTS</SpaLink></li>
           </ul>
         </div>
       </div>
