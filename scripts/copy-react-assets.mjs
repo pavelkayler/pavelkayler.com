@@ -40,17 +40,15 @@ await writeFile(
 
 // Ship only the legacy assets that the React shell and retained CSS can still use.
 // The archived Wfolio runtime JS, builder resources, locale flags, and unrelated assets
-// deliberately stay out of dist. Media used by pages is copied separately from manifest.
+// deliberately stay out of dist. Modern browsers use the WOFF2 Font Awesome sources,
+// so the legacy TTF fallbacks are intentionally not published.
 const runtimeAssets = [
   'assets/mobile-overrides.css',
   'assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css',
   'assets/custom-icons-cb5906d824b59115b50c97eba5c0ee88aa5a4acb1a3af5a672f988e36a617629.woff2',
   'assets/font-awesome/fa-brands-400-42c6ccd2717a8509dd84c26181c64985ac29600b9d04d9b5a34b488fbf3075e1.woff2',
-  'assets/font-awesome/fa-brands-400-7cc4dacf54efa45acc99b5c23838ba51ce37656e9a07c95152108bbaf3363070.ttf',
   'assets/font-awesome/fa-light-300-e773295f27b81341e6948427170f7e29e2efac0aa00f9288185dc22da580ee56.woff2',
-  'assets/font-awesome/fa-light-300-629842d840cece560b139b9cc06e2ebb2c92279670383fe8ebbea2b466500eda.ttf',
   'assets/font-awesome/fa-solid-900-9980baf58c671d191663b98fd1f8b3558c021fd3ca8bc831cee1b1b132b39d8d.woff2',
-  'assets/font-awesome/fa-solid-900-f0938550911d9b7551e0fd8117b4497af28d5de97e7675e55b63f703814fb7ec.ttf',
   'assets/icons/play-5a2cfa658b34b5b1463187d6bad7d18ce0e472d3a5ed1c6910b08c8d76263cf1.png',
   'assets/icons/arrow_left_white-cf28a26311868dd4643253ea36f74a09da8a70eaaff77d7d1257fe4e58ac0d7b.png',
   'assets/icons/arrow_right_white-b0b396c47eac4496b0ff49a7fe411ccab238e03d7db9c3555226e269f67b80c7.png',
