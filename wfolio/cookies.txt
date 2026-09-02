@@ -1,0 +1,8 @@
+# HTTrack Website Copier Cookie File
+# This file format is compatible with Netscape cookies
+.wfolio.ru	TRUE	/	FALSE	1999999999	__ddg1_	yluMCvsrkSvW9IAE7yv3
+.yandex.ru	TRUE	/	FALSE	1999999999	bh	YMP+lcsGag/s69e6D7udubEG1e+fzg4=
+.wfolio.ru	TRUE	/	FALSE	1999999999	__ddg8_	FW208lQQIUy0URDV
+.wfolio.ru	TRUE	/	FALSE	1999999999	__ddg10_	1768259435
+.wfolio.ru	TRUE	/	FALSE	1999999999	__ddg9_	45.85.105.26
+
