@@ -9,15 +9,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = ["index.html", "works.html", "portraits.html", "projects.html", "brands.html", "contacts.html"]
-REMOTE_WFOLIO_IMAGE_RE = re.compile(r"(?:https?:)?//i\.wfolio\.ru/", re.I)
-LOCAL_WFOLIO_IMAGE_RE = re.compile(r"(?<![\w:/.-])i\.wfolio\.ru/[^\s\"'<>)]+", re.I)
+REMOTE_WFOLIO_URL_RE = re.compile(r"(?:https?:)?//(?:[a-z0-9-]+\.)*wfolio\.ru/", re.I)
+LOCAL_WFOLIO_ASSET_RE = re.compile(
+    r"(?<![\w:/.-])(?:i|static)\.wfolio\.ru/[^\s\"'<>)&,]+",
+    re.I,
+)
 ATTR_RE = re.compile(r"\b(?:src|href|data-src)=[\"']([^\"']+)[\"']", re.I)
 
 errors: list[str] = []
 stats = {
     "pages": 0,
-    "local_image_references": 0,
-    "unique_local_images": set(),
+    "local_asset_references": 0,
+    "unique_local_assets": set(),
     "local_file_references": 0,
 }
 
@@ -50,12 +53,13 @@ for page in PAGES:
     stats["pages"] += 1
     text = path.read_text(encoding="utf-8")
     canonical_path = "/" if page == "index.html" else "/" + page
-    canonical = f'https://pavelkayler.com{canonical_path}'
+    canonical = f"https://pavelkayler.com{canonical_path}"
 
-    if REMOTE_WFOLIO_IMAGE_RE.search(text):
-        fail(f"{page}: still contains external i.wfolio.ru image URL")
-    if "wfolio.ru/card/" in text:
-        fail(f"{page}: still loads wfolio.ru/card")
+    external_wfolio = sorted(set(m.group(0) for m in REMOTE_WFOLIO_URL_RE.finditer(text)))
+    if external_wfolio:
+        fail(f"{page}: still contains external Wfolio URL(s): {', '.join(external_wfolio)}")
+    if 'data-gallery-share-url=' in text:
+        fail(f"{page}: obsolete Wfolio gallery share endpoint metadata remains")
     if 'class="branding"' in text or "class='branding'" in text:
         fail(f"{page}: visible Wfolio branding remains")
     if 'class="admin-link"' in text or "class='admin-link'" in text or "wfolio.ru/edit" in text:
@@ -65,15 +69,15 @@ for page in PAGES:
     if "pavelkayler.ru" in text:
         fail(f"{page}: old pavelkayler.ru domain remains")
 
-    for match in LOCAL_WFOLIO_IMAGE_RE.finditer(text):
+    for match in LOCAL_WFOLIO_ASSET_RE.finditer(text):
         value = match.group(0).rstrip(",")
         file_path = local_path(value)
         if file_path is None:
             continue
-        stats["local_image_references"] += 1
-        stats["unique_local_images"].add(str(file_path.relative_to(ROOT)))
+        stats["local_asset_references"] += 1
+        stats["unique_local_assets"].add(str(file_path.relative_to(ROOT)))
         if not file_path.is_file() or file_path.stat().st_size == 0:
-            fail(f"{page}: missing local image {value}")
+            fail(f"{page}: missing local Wfolio asset {value}")
 
     for match in ATTR_RE.finditer(text):
         value = match.group(1)
@@ -96,7 +100,7 @@ for path in required_files:
     if not path.exists():
         fail(f"missing required file: {path.relative_to(ROOT)}")
 
-# The restored Wfolio bundle/CSS should be the original full assets, not the temporary migration shims.
+# The restored Wfolio bundle/CSS should be the original full assets, not migration shims.
 theme_js = required_files[-2]
 theme_css = required_files[-1]
 if theme_js.exists() and theme_js.stat().st_size < 250_000:
@@ -110,8 +114,8 @@ for old_httrack_file in ["backblue.gif", "fade.gif", "wfolio.whtt"]:
 
 print("Migration validation")
 print(f"  pages: {stats['pages']}/{len(PAGES)}")
-print(f"  local image references checked: {stats['local_image_references']}")
-print(f"  unique local image files referenced: {len(stats['unique_local_images'])}")
+print(f"  local Wfolio asset references checked: {stats['local_asset_references']}")
+print(f"  unique local Wfolio assets referenced: {len(stats['unique_local_assets'])}")
 print(f"  other local file references checked: {stats['local_file_references']}")
 print(f"  errors: {len(errors)}")
 
