@@ -44,7 +44,10 @@ function selectSrcset(raw) {
   }).filter(Boolean)
   if (!candidates.length) return ''
 
-  const wanted = [600, 1240, 1880, 2520]
+  // Keep this list in sync with generate-structured-content.mjs. The first target
+  // resolves to Wfolio's 440/480px candidate and avoids serving a 600/640px image
+  // unnecessarily on narrow mobile viewports.
+  const wanted = [440, 600, 1240, 1880, 2520]
   const selected = []
   for (const target of wanted) {
     const candidate = candidates.reduce((best, current) =>
