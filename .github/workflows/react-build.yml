@@ -16,23 +16,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
       - name: Install dependencies
         run: npm install
+
       - name: Build React SPA
         env:
           VITE_BASE_PATH: /pavelkayler.com/
         run: npm run build
+
       - name: Check SPA output
         run: |
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/legacy-theme.css
           test -d dist/_app
+          test -f dist/works/index.html
+          test -f dist/portraits/index.html
+          test -f dist/projects/index.html
+          test -f dist/brands/index.html
+          test -f dist/contacts/index.html
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
           ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
-          echo "React V2 build is valid"
+
+          # React runtime must never regress to injecting archived page HTML.
+          test ! -f src/components/LegacyPage.tsx
+          ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
+          ! grep -q "html: string" src/generated/pages.ts || exit 1
+
+          echo "React V2 native build is valid"
