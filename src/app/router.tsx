@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { MainLayout } from '../layouts/MainLayout'
-import { LegacyPage } from '../components/LegacyPage'
+import { HomePage } from '../pages/HomePage'
 import { WorksPage } from '../pages/WorksPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { GalleryPage } from '../pages/GalleryPage'
@@ -12,7 +12,7 @@ export const router = createBrowserRouter(
     {
       element: <MainLayout />,
       children: [
-        { index: true, element: <LegacyPage pageKey="home" /> },
+        { index: true, element: <HomePage /> },
         { path: 'works', element: <WorksPage /> },
         { path: 'portraits', element: <GalleryPage pageKey="portraits" /> },
         { path: 'projects', element: <GalleryPage pageKey="projects" /> },
