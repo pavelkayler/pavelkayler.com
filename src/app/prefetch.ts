@@ -1,4 +1,5 @@
-import { pages, type PageKey } from '../generated/pages'
+import type { PageKey } from '../generated/pages'
+import { albums, contactsContent, homeContent, worksContent } from '../generated/structured'
 
 const routeToKey: Record<string, PageKey> = {
   '/': 'home',
@@ -7,6 +8,12 @@ const routeToKey: Record<string, PageKey> = {
   '/projects': 'projects',
   '/brands': 'brands',
   '/contacts': 'contacts',
+}
+
+interface ImageSpec {
+  src: string
+  srcset: string
+  sizes: string
 }
 
 const warmedCounts = new Map<PageKey, number>()
@@ -26,21 +33,55 @@ function connectionIsConstrained() {
   return Boolean(connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g')
 }
 
-function routeImages(key: PageKey) {
-  const base = import.meta.env.BASE_URL
-  const html = pages[key].html.replaceAll('__BASE__', base)
-  const documentFragment = new DOMParser().parseFromString(html, 'text/html')
-
-  return [...documentFragment.querySelectorAll<HTMLImageElement>('img')]
-    .map((image) => ({
-      src: image.getAttribute('src') || '',
-      srcset: image.getAttribute('srcset') || '',
-      sizes: image.getAttribute('sizes') || '',
-    }))
-    .filter((image) => image.src || image.srcset)
+function withBase(value: string) {
+  return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
 }
 
-function warmImage(key: PageKey, imageSpec: { src: string; srcset: string; sizes: string }, priority: 'high' | 'low') {
+function structuredImageSpec(
+  image: { src: string; srcSet: string },
+  sizes: string,
+): ImageSpec {
+  return {
+    src: withBase(image.src),
+    srcset: withBase(image.srcSet),
+    sizes,
+  }
+}
+
+function routeImages(key: PageKey): ImageSpec[] {
+  switch (key) {
+    case 'home': {
+      const slides = homeContent.cover.slides.map((image) => structuredImageSpec(image, '100vw'))
+      const content = homeContent.pictureRows.flatMap((row) =>
+        row.columns.map((column) => structuredImageSpec(
+          column.image,
+          row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw',
+        )),
+      )
+      return [...slides, ...content]
+    }
+
+    case 'works':
+      return worksContent.cards.map((card) => structuredImageSpec(card.image, '(max-width: 768px) 100vw, 33vw'))
+
+    case 'portraits':
+    case 'projects':
+    case 'brands': {
+      const album = albums[key]
+      const result: ImageSpec[] = []
+      if (album.cover?.poster) {
+        result.push({ src: withBase(album.cover.poster), srcset: '', sizes: '100vw' })
+      }
+      result.push(...album.photos.map((photo) => structuredImageSpec(photo.image, '(max-width: 768px) 50vw, 33vw')))
+      return result
+    }
+
+    case 'contacts':
+      return [structuredImageSpec(contactsContent.image, '(max-width: 768px) 100vw, 33vw')]
+  }
+}
+
+function warmImage(key: PageKey, imageSpec: ImageSpec, priority: 'high' | 'low') {
   const image = new Image()
   image.decoding = 'async'
   image.fetchPriority = priority
@@ -68,8 +109,8 @@ export function prefetchRoute(pathname: string, mode: 'intent' | 'idle' = 'inten
   if (!key) return
   if (mode === 'idle' && connectionIsConstrained()) return
 
-  // Intent should make the next viewport effectively hot. Idle warming is deliberately
-  // conservative so the portfolio does not download every gallery in the background.
+  // Intent makes the next viewport hot. Idle warming remains deliberately conservative
+  // so a photo portfolio does not download every gallery in the background.
   const desiredCount = mode === 'intent' ? 6 : 2
   const currentCount = warmedCounts.get(key) ?? 0
   if (currentCount >= desiredCount) return
@@ -96,8 +137,6 @@ export function scheduleRouteWarmup(pathname: string) {
   const routes = neighbors[normalizePath(pathname)] ?? []
   const timers: number[] = []
 
-  // Let the current page claim the network first, then warm only two responsive images
-  // from each likely destination. Hover/focus/pointerdown upgrades that route to six.
   routes.forEach((route, index) => {
     timers.push(window.setTimeout(() => prefetchRoute(route, 'idle'), 1200 + index * 650))
   })
