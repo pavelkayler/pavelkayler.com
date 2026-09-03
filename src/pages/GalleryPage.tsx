@@ -23,7 +23,11 @@ export function GalleryPage({ pageKey, album }: { pageKey: AlbumPageKey; album: 
         )}
 
         <div className="sections-container -small-pad-before -small-pad-after -medium-width -visible">
-          <div className="sections-container-inner"><div className="section-container"><NativeGallery photos={album.photos} /></div></div>
+          <div className="sections-container-inner">
+            <div className="section-container">
+              <NativeGallery photos={album.photos} prioritizeFirst={!album.cover} />
+            </div>
+          </div>
         </div>
 
         {album.quote.length > 0 && (

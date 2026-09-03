@@ -3,6 +3,8 @@ import type { GeneratedPage } from '../generated/pages'
 const SITE_ORIGIN = 'https://pavelkayler.com'
 const SITE_NAME = 'Pavel Kayler | Photographer'
 const ROBOTS = 'follow, index, max-snippet:-1, max-video-preview:-1, max-image-preview:large'
+const NOT_FOUND_TITLE = 'Страница не найдена | PAVEL KAYLER'
+const NOT_FOUND_DESCRIPTION = 'Запрошенная страница не найдена.'
 
 function canonicalUrl(page: GeneratedPage) {
   if (page.path === '/') return `${SITE_ORIGIN}/`
@@ -36,6 +38,14 @@ function upsertCanonical(href: string) {
     document.head.append(element)
   }
   element.href = href
+}
+
+function removeCanonical() {
+  document.head.querySelector('link[rel="canonical"]')?.remove()
+}
+
+function removeStructuredData() {
+  document.head.querySelector('script[type="application/ld+json"][data-seo-schema]')?.remove()
 }
 
 function upsertStructuredData(page: GeneratedPage, canonical: string) {
@@ -106,4 +116,29 @@ export function applyPageMetadata(page: GeneratedPage) {
   }
 
   upsertStructuredData(page, canonical)
+}
+
+export function applyNotFoundMetadata() {
+  document.title = NOT_FOUND_TITLE
+  removeCanonical()
+  removeStructuredData()
+
+  upsertMeta('name', 'description', NOT_FOUND_DESCRIPTION)
+  upsertMeta('name', 'robots', 'noindex, nofollow')
+
+  upsertMeta('property', 'og:title', NOT_FOUND_TITLE)
+  upsertMeta('property', 'og:description', NOT_FOUND_DESCRIPTION)
+  upsertMeta('property', 'og:type', 'website')
+  upsertMeta('property', 'og:locale', 'ru_RU')
+  upsertMeta('property', 'og:site_name', SITE_NAME)
+  removeMeta('property', 'og:url')
+  removeMeta('property', 'og:image')
+  removeMeta('property', 'vk:image')
+
+  upsertMeta('name', 'twitter:card', 'summary')
+  upsertMeta('name', 'twitter:domain', 'pavelkayler.com')
+  upsertMeta('name', 'twitter:title', NOT_FOUND_TITLE)
+  upsertMeta('name', 'twitter:description', NOT_FOUND_DESCRIPTION)
+  removeMeta('name', 'twitter:url')
+  removeMeta('name', 'twitter:image')
 }

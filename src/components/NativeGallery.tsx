@@ -2,7 +2,12 @@ import { useEffect, useRef } from 'react'
 import type { GalleryPhoto } from '../content/types'
 import { resolveAsset, StructuredImage } from './StructuredImage'
 
-export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly GalleryPhoto[] }) {
+interface Props {
+  photos: GalleryPhoto[] | readonly GalleryPhoto[]
+  prioritizeFirst?: boolean
+}
+
+export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
   const galleryRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -102,8 +107,8 @@ export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly Ga
               <StructuredImage
                 image={photo.image}
                 sizes="(max-width: 768px) 50vw, 33vw"
-                loading={index < 2 ? 'eager' : 'lazy'}
-                fetchPriority={index === 0 ? 'high' : 'auto'}
+                loading={prioritizeFirst && index < 2 ? 'eager' : 'lazy'}
+                fetchPriority={prioritizeFirst && index === 0 ? 'high' : 'auto'}
               />
             </a>
           </div>

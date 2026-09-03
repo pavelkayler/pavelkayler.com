@@ -12,6 +12,8 @@ const socialImages = JSON.parse(await readFile(path.join(ROOT, 'src/generated/so
 const SITE_ORIGIN = 'https://pavelkayler.com'
 const SITE_NAME = 'Pavel Kayler | Photographer'
 const ROBOTS = 'follow, index, max-snippet:-1, max-video-preview:-1, max-image-preview:large'
+const NOT_FOUND_TITLE = 'Страница не найдена | PAVEL KAYLER'
+const NOT_FOUND_DESCRIPTION = 'Запрошенная страница не найдена.'
 
 async function copyAssetTo(sourceRelativePath, targetRelativePath) {
   const source = path.join(ROOT, sourceRelativePath)
@@ -186,6 +188,7 @@ function renderSeoShell(shell, page) {
   const socialImage = socialImageUrl(page)
 
   $('html').attr('lang', 'ru')
+  $('body').attr('class', page.bodyClass)
   $('title').text(page.title)
   setCanonical($, canonical)
 
@@ -225,7 +228,7 @@ const shell = await readFile(path.join(DIST, 'index.html'), 'utf8')
 
 // BrowserRouter on GitHub Pages: create actual index files for every public route so
 // direct navigation and refresh return HTTP 200. Each shell receives route-specific SEO
-// before it is written, rather than publishing six identical copies of the home head.
+// and the matching body class before it is written, avoiding a home-theme flash before React boots.
 for (const page of Object.values(pages)) {
   if (page.path === '/') {
     await writeFile(path.join(DIST, 'index.html'), renderSeoShell(shell, page))
@@ -238,14 +241,30 @@ for (const page of Object.values(pages)) {
   await writeFile(path.join(routeDir, 'index.html'), renderSeoShell(shell, page))
 }
 
-// Keep a generic fallback as a safety net for unknown/deep links. It should never be
-// indexed as a page of its own; React will redirect an unknown route to the home page.
+// Keep a generic fallback for unknown/deep links. It deliberately carries no canonical,
+// social preview image or structured data, and React renders a real 404 instead of redirecting.
 const $404 = load(shell, { decodeEntities: false })
-$404('title').text('Страница не найдена | PAVEL KAYLER')
+$404('html').attr('lang', 'ru')
+if (pages.works?.bodyClass) $404('body').attr('class', pages.works.bodyClass)
+$404('title').text(NOT_FOUND_TITLE)
+setMeta($404, 'name', 'description', NOT_FOUND_DESCRIPTION)
 setMeta($404, 'name', 'robots', 'noindex, nofollow')
+setMeta($404, 'property', 'og:title', NOT_FOUND_TITLE)
+setMeta($404, 'property', 'og:description', NOT_FOUND_DESCRIPTION)
+setMeta($404, 'property', 'og:type', 'website')
+setMeta($404, 'property', 'og:locale', 'ru_RU')
+setMeta($404, 'property', 'og:site_name', SITE_NAME)
+setMeta($404, 'name', 'twitter:card', 'summary')
+setMeta($404, 'name', 'twitter:domain', 'pavelkayler.com')
+setMeta($404, 'name', 'twitter:title', NOT_FOUND_TITLE)
+setMeta($404, 'name', 'twitter:description', NOT_FOUND_DESCRIPTION)
 $404('link[rel="canonical"]').remove()
-$404('meta[property="og:url"]').remove()
-$404('meta[name="twitter:url"]').remove()
+removeMeta($404, 'property', 'og:url')
+removeMeta($404, 'property', 'og:image')
+removeMeta($404, 'property', 'vk:image')
+removeMeta($404, 'name', 'twitter:url')
+removeMeta($404, 'name', 'twitter:image')
+$404('script[type="application/ld+json"][data-seo-schema]').remove()
 await writeFile(path.join(DIST, '404.html'), $404.html())
 
 let total = 0

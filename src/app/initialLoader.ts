@@ -34,6 +34,13 @@ async function waitForImage(image: HTMLImageElement) {
   }
 }
 
+function waitForImageUrl(src: string) {
+  const image = new Image()
+  image.decoding = 'async'
+  image.src = src
+  return waitForImage(image)
+}
+
 async function waitForCriticalVisuals() {
   await waitForRouteRoot()
 
@@ -42,11 +49,23 @@ async function waitForCriticalVisuals() {
       '#root img[fetchpriority="high"], #root .persistent-site-logo img',
     ),
   )
-  const firstRouteImage = document.querySelector<HTMLImageElement>('#root .react-route img')
-  if (firstRouteImage && !images.includes(firstRouteImage)) images.push(firstRouteImage)
+
+  const coverVideo = document.querySelector<HTMLVideoElement>('#root .react-route video[poster]')
+  const posterReady = coverVideo?.poster ? waitForImageUrl(coverVideo.poster) : null
+
+  // On cover-less routes the first route image is part of the initial viewport. Album
+  // routes with a video cover wait for the poster instead, not for gallery photos below it.
+  if (!posterReady) {
+    const firstRouteImage = document.querySelector<HTMLImageElement>('#root .react-route img')
+    if (firstRouteImage && !images.includes(firstRouteImage)) images.push(firstRouteImage)
+  }
 
   const fontsReady = document.fonts.ready.then(() => undefined).catch(() => undefined)
-  await Promise.all([fontsReady, ...images.map(waitForImage)])
+  await Promise.all([
+    fontsReady,
+    ...images.map(waitForImage),
+    ...(posterReady ? [posterReady] : []),
+  ])
 }
 
 export async function dismissInitialLoader() {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
@@ -24,12 +24,14 @@ function normalizePath(pathname: string) {
 export function MainLayout() {
   const { pathname } = useLocation()
   const normalizedPath = normalizePath(pathname)
-  const page = pages[routeToKey[normalizedPath] ?? 'home']
+  const pageKey = routeToKey[normalizedPath]
+  const page = pageKey ? pages[pageKey] : undefined
 
-  useEffect(() => {
-    applyPageMetadata(page)
-    return scheduleRouteWarmup(normalizedPath)
-  }, [normalizedPath, page])
+  useLayoutEffect(() => {
+    if (page) applyPageMetadata(page)
+  }, [page])
+
+  useEffect(() => scheduleRouteWarmup(normalizedPath), [normalizedPath])
 
   return (
     <div className="page-wrapper react-page-wrapper">
