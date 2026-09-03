@@ -12,6 +12,7 @@ export function WorksPage() {
     <div className="react-route native-react-page">
       <main className="page-main js-main">
         <LogoSpacer />
+        <h1 className="visually-hidden">Works</h1>
 
         <div className="sections-container -small-pad-before -small-pad-after -full-width -visible">
           <div className="sections-container-inner"><div className="section-container">
