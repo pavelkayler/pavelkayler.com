@@ -1,7 +1,7 @@
 {
-  "remote_assets_found": 686,
-  "localized": 686,
-  "downloaded": 0,
-  "already_present": 686,
+  "remote_urls_found": 641,
+  "localized": 641,
+  "downloaded": 641,
+  "already_present": 0,
   "failed": []
 }
