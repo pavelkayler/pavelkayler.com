@@ -30,10 +30,10 @@ function withBase(value: string) {
   return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
 }
 
-function warmImage(key: PageKey, imageSpec: PrefetchImageSpec, priority: 'high' | 'low') {
+function warmImage(key: PageKey, imageSpec: PrefetchImageSpec) {
   const image = new Image()
   image.decoding = 'async'
-  image.fetchPriority = priority
+  image.fetchPriority = 'high'
   if (imageSpec.sizes) image.sizes = imageSpec.sizes
   if (imageSpec.srcSet) image.srcset = withBase(imageSpec.srcSet)
   if (imageSpec.src) image.src = withBase(imageSpec.src)
@@ -59,17 +59,18 @@ export function prefetchRoute(pathname: string, mode: 'intent' | 'idle' = 'inten
   if (!key) return
   if (mode === 'idle' && connectionIsConstrained()) return
 
-  // Warm the route JS/data chunk as well as its first viewport images. This makes the
-  // first click retain SPA immediacy even though non-home routes are code-split.
+  // Route JS/data can be warmed in idle time without forcing large photography assets
+  // onto the network. Images are prefetched only after explicit navigation intent.
   void preloadRouteModule(normalized)
+  if (mode === 'idle') return
 
-  const desiredCount = mode === 'intent' ? 6 : 2
+  const desiredCount = 6
   const currentCount = warmedCounts.get(key) ?? 0
   if (currentCount >= desiredCount) return
 
   const images = routePrefetch[key] ?? []
   for (const imageSpec of images.slice(currentCount, desiredCount)) {
-    warmImage(key, imageSpec, mode === 'intent' ? 'high' : 'low')
+    warmImage(key, imageSpec)
   }
   warmedCounts.set(key, Math.min(desiredCount, images.length))
 }
