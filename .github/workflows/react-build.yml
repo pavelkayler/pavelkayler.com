@@ -125,25 +125,21 @@ jobs:
           echo "React V2 split native build with SEO metadata is valid"
       - name: Report largest production assets
         run: |
-          echo "Largest 30 production files:"
-          find dist -type f -printf '%s\t%p\n' \
-            | sort -nr \
-            | head -n 30 \
-            | numfmt --field=1 --to=iec-i --suffix=B
-
-          echo
-          echo "Production bytes by asset family:"
           python3 - <<'PY'
           from collections import defaultdict
           from pathlib import Path
 
+          root = Path('dist')
+          files = [(path.stat().st_size, path) for path in root.rglob('*') if path.is_file()]
+
+          print('Largest 30 production files:')
+          for size, path in sorted(files, reverse=True)[:30]:
+              print(f'{size / 1024 / 1024:8.1f} MiB  {path}')
+
+          print('\nProduction bytes by asset family:')
           totals = defaultdict(int)
           counts = defaultdict(int)
-          root = Path('dist')
-
-          for path in root.rglob('*'):
-              if not path.is_file():
-                  continue
+          for size, path in files:
               rel = path.relative_to(root)
               parts = rel.parts
               if parts and parts[0] in {'i.wfolio.ru', 'static.wfolio.ru', 'vp.wfolio.ru'}:
@@ -154,9 +150,24 @@ jobs:
                   family = 'assets'
               else:
                   family = 'html/seo/other'
-              totals[family] += path.stat().st_size
+              totals[family] += size
               counts[family] += 1
 
           for family, size in sorted(totals.items(), key=lambda item: item[1], reverse=True):
               print(f'{family:18} {size / 1024 / 1024:9.1f} MiB  ({counts[family]} files)')
           PY
+
+          echo
+          echo "Cover/video metadata:"
+          if command -v ffprobe >/dev/null 2>&1; then
+            while IFS= read -r -d '' video; do
+              echo "--- $video"
+              ffprobe -v error \
+                -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,bit_rate \
+                -show_entries format=duration,size,bit_rate \
+                -of default=noprint_wrappers=1 \
+                "$video"
+            done < <(find dist -type f -name '*.mp4' -print0)
+          else
+            echo "ffprobe is not available on this runner"
+          fi
