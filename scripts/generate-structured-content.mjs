@@ -25,6 +25,7 @@ const srcsetTargets = {
   gallery: [600, 1240, 2520],
   contact: [600, 1240, 1880],
 }
+const MAX_FULLSCREEN_PIXELS = 8_000_000
 
 function cleanText(value = '') { return value.replace(/\s+/g, ' ').trim() }
 function normalizeLocalPath(value = '') {
@@ -106,7 +107,8 @@ function galleryPhoto($, element) {
   const link = piece.find('a.js-gallery-link').first()
   let versions = []
   try { versions = JSON.parse(link.attr('data-gallery-versions') || '[]') } catch (error) { console.warn(`Could not parse gallery versions for ${piece.attr('id')}:`, error) }
-  const best = versions.filter((item) => item?.src && item?.w && item?.h).sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
+  const validVersions = versions.filter((item) => item?.src && item?.w && item?.h).sort((a, b) => (b.w * b.h) - (a.w * a.h))
+  const best = validVersions.find((item) => item.w * item.h <= MAX_FULLSCREEN_PIXELS) || validVersions.at(-1)
   const preview = imageData($, piece.find('.lazy-image').first(), srcsetTargets.gallery)
   return {
     id: piece.attr('id') || `piece-${Math.random().toString(36).slice(2)}`,
