@@ -40,8 +40,8 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
                 <StructuredImage
                   image={slide}
                   sizes="100vw"
-                  loading={index < 2 ? 'eager' : 'lazy'}
-                  fetchPriority={index === 0 ? 'high' : 'auto'}
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  fetchPriority={index === 0 ? 'high' : 'low'}
                 />
               </div>
             ))}
