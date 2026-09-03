@@ -1,4 +1,4 @@
-# Preview revision: react-v2-dd8d8a5-2026-09-03
+# Preview revision: react-v2-acd9d7e-2026-09-03
 name: Publish React V2 preview
 
 on:
@@ -41,6 +41,17 @@ jobs:
         env:
           VITE_BASE_PATH: /pavelkayler.com/
         run: npm run build
+
+      - name: Install media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python3 -m pip install --disable-pip-version-check --quiet pillow
+
+      - name: Optimize production media
+        run: |
+          node scripts/optimize-production-media.mjs
+          python3 scripts/optimize-production-images.py
 
       - name: Validate React SPA output
         run: |
