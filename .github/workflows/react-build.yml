@@ -30,8 +30,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
+          python3 -m pip install --disable-pip-version-check --quiet pillow
       - name: Optimize production media
-        run: node scripts/optimize-production-media.mjs
+        run: |
+          node scripts/optimize-production-media.mjs
+          python3 scripts/optimize-production-images.py
       - name: Check SPA output
         run: |
           test -f dist/index.html
