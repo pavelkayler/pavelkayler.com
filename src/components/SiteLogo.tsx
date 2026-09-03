@@ -5,7 +5,7 @@ import { resolveAsset } from './StructuredImage'
 export function SiteLogo() {
   return (
     <div className="logo js-logo -visible">
-      <Link className="logo-link" title="pavelkayler.com" to="/">
+      <Link className="logo-link" title="pavelkayler.com" to="/" viewTransition>
         <span className="logo-with-placeholder -light-logo" style={{ maxWidth: siteLogo.maxWidth }}>
           <canvas
             className="logo-placeholder"
@@ -17,6 +17,8 @@ export function SiteLogo() {
             alt={siteLogo.alt}
             className="logo-image"
             src={resolveAsset(siteLogo.src)}
+            width={968}
+            height={162}
             style={{ maxHeight: siteLogo.maxHeight }}
             decoding="async"
           />

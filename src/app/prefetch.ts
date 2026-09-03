@@ -11,6 +11,8 @@ const routeToKey: Record<string, PageKey> = {
   '/contacts': 'contacts',
 }
 
+type PrefetchMode = 'intent' | 'idle' | 'background'
+
 const warmedCounts = new Map<PageKey, number>()
 const warmers = new Map<PageKey, HTMLImageElement[]>()
 
@@ -30,10 +32,10 @@ function withBase(value: string) {
   return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
 }
 
-function warmImage(key: PageKey, imageSpec: PrefetchImageSpec) {
+function warmImage(key: PageKey, imageSpec: PrefetchImageSpec, priority: 'high' | 'low') {
   const image = new Image()
   image.decoding = 'async'
-  image.fetchPriority = 'high'
+  image.fetchPriority = priority
   if (imageSpec.sizes) image.sizes = imageSpec.sizes
   if (imageSpec.srcSet) image.srcset = withBase(imageSpec.srcSet)
   if (imageSpec.src) image.src = withBase(imageSpec.src)
@@ -53,24 +55,25 @@ function warmImage(key: PageKey, imageSpec: PrefetchImageSpec) {
   image.addEventListener('error', release, { once: true })
 }
 
-export function prefetchRoute(pathname: string, mode: 'intent' | 'idle' = 'intent') {
+export function prefetchRoute(pathname: string, mode: PrefetchMode = 'intent') {
   const normalized = normalizePath(pathname)
   const key = routeToKey[normalized]
   if (!key) return
-  if (mode === 'idle' && connectionIsConstrained()) return
+  if (mode !== 'intent' && connectionIsConstrained()) return
 
-  // Route JS/data can be warmed in idle time without forcing large photography assets
-  // onto the network. Images are prefetched only after explicit navigation intent.
+  // Route code/data is cheap enough to warm in idle time. Photography assets are
+  // reserved for explicit navigation intent or a deliberately throttled background pass.
   void preloadRouteModule(normalized)
   if (mode === 'idle') return
 
-  const desiredCount = 6
+  const desiredCount = mode === 'intent' ? 6 : 2
   const currentCount = warmedCounts.get(key) ?? 0
   if (currentCount >= desiredCount) return
 
   const images = routePrefetch[key] ?? []
+  const priority = mode === 'intent' ? 'high' : 'low'
   for (const imageSpec of images.slice(currentCount, desiredCount)) {
-    warmImage(key, imageSpec)
+    warmImage(key, imageSpec, priority)
   }
   warmedCounts.set(key, Math.min(desiredCount, images.length))
 }
@@ -94,4 +97,15 @@ export function scheduleRouteWarmup(pathname: string) {
   })
 
   return () => timers.forEach((timer) => window.clearTimeout(timer))
+}
+
+export function scheduleSiteWarmup(pathname: string) {
+  if (connectionIsConstrained()) return
+
+  const current = normalizePath(pathname)
+  Object.keys(routeToKey)
+    .filter((route) => route !== current)
+    .forEach((route, index) => {
+      window.setTimeout(() => prefetchRoute(route, 'background'), 900 + index * 850)
+    })
 }

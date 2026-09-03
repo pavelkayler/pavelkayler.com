@@ -21,7 +21,7 @@ export function WorksPage() {
                 const warm = () => prefetchRoute(card.to)
                 return (
                   <div className="listing-item js-listing-item" key={card.to}>
-                    <Link className="listing-link" to={card.to} onPointerEnter={warm} onFocus={warm} onPointerDown={warm}>
+                    <Link className="listing-link" to={card.to} viewTransition onPointerEnter={warm} onFocus={warm} onPointerDown={warm}>
                       <StructuredImage image={card.image} sizes="(max-width: 768px) 100vw, 33vw" />
                       <div className="listing-caption"><div className="listing-title"><span>{card.title}</span></div></div>
                     </Link>

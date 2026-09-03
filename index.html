@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-site-loading="true">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -41,6 +41,50 @@
       {"@context":"https://schema.org","@type":"WebSite","name":"Pavel Kayler | Photographer","url":"https://pavelkayler.com/"}
     </script>
 
+    <style>
+      html[data-site-loading="true"],
+      html[data-site-loading="true"] body {
+        overflow: hidden;
+      }
+
+      #site-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        background: #1e1e1e;
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 360ms ease, visibility 360ms ease;
+      }
+
+      #site-loader.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .site-loader-spinner {
+        width: 28px;
+        height: 28px;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.22);
+        border-top-color: rgba(255, 255, 255, 0.92);
+        border-radius: 50%;
+        animation: site-loader-spin 720ms linear infinite;
+      }
+
+      @keyframes site-loader-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #site-loader { transition-duration: 0.001ms; }
+        .site-loader-spinner { animation: none; border-color: rgba(255, 255, 255, 0.68); }
+      }
+    </style>
+
     <link rel="icon" href="%BASE_URL%favicon.ico" />
     <!-- Wfolio kept most of the Polina page/layout CSS inline in every HTML page.
          copy-react-assets.mjs extracts that CSS into this standalone production file. -->
@@ -49,6 +93,9 @@
     <link rel="stylesheet" href="%BASE_URL%assets/mobile-overrides.css" />
   </head>
   <body class="theme-polina -has-cover -color-scheme -scheme-dark -accented uc-page-type-page">
+    <div id="site-loader" role="status" aria-live="polite" aria-label="Загрузка сайта">
+      <span class="site-loader-spinner" aria-hidden="true"></span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

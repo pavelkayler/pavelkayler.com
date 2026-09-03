@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react'
 import type { HomeContent } from '../content/types'
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { LogoSpacer } from './LogoSpacer'
 import { StructuredImage } from './StructuredImage'
 
 export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
   const [active, setActive] = useState(0)
+  const reducedMotion = usePrefersReducedMotion()
 
   useEffect(() => {
-    if (cover.slides.length < 2) return
+    if (reducedMotion || cover.slides.length < 2) return
     const timer = window.setInterval(() => {
       setActive((current) => (current + 1) % cover.slides.length)
     }, cover.delay)
     return () => window.clearInterval(timer)
-  }, [cover.delay, cover.slides.length])
+  }, [cover.delay, cover.slides.length, reducedMotion])
 
   const scrollDown = () => {
-    document.getElementById('home-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById('home-main')?.scrollIntoView({
+      behavior: reducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    })
   }
 
   return (
@@ -33,7 +38,7 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
                   visibility: 'visible',
                   opacity: index === active ? 1 : 0,
                   zIndex: index === active ? 2 : 1,
-                  transition: 'opacity 800ms ease',
+                  transition: reducedMotion ? 'none' : 'opacity 800ms ease',
                   pointerEvents: index === active ? 'auto' : 'none',
                 }}
               >
