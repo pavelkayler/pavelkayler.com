@@ -123,3 +123,40 @@ jobs:
 
           du -sh dist
           echo "React V2 split native build with SEO metadata is valid"
+      - name: Report largest production assets
+        run: |
+          echo "Largest 30 production files:"
+          find dist -type f -printf '%s\t%p\n' \
+            | sort -nr \
+            | head -n 30 \
+            | numfmt --field=1 --to=iec-i --suffix=B
+
+          echo
+          echo "Production bytes by asset family:"
+          python3 - <<'PY'
+          from collections import defaultdict
+          from pathlib import Path
+
+          totals = defaultdict(int)
+          counts = defaultdict(int)
+          root = Path('dist')
+
+          for path in root.rglob('*'):
+              if not path.is_file():
+                  continue
+              rel = path.relative_to(root)
+              parts = rel.parts
+              if parts and parts[0] in {'i.wfolio.ru', 'static.wfolio.ru', 'vp.wfolio.ru'}:
+                  family = parts[0]
+              elif parts and parts[0] == '_app':
+                  family = '_app'
+              elif parts and parts[0] == 'assets':
+                  family = 'assets'
+              else:
+                  family = 'html/seo/other'
+              totals[family] += path.stat().st_size
+              counts[family] += 1
+
+          for family, size in sorted(totals.items(), key=lambda item: item[1], reverse=True):
+              print(f'{family:18} {size / 1024 / 1024:9.1f} MiB  ({counts[family]} files)')
+          PY
