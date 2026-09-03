@@ -102,8 +102,8 @@ export function NativeGallery({ photos }: { photos: GalleryPhoto[] | readonly Ga
               <StructuredImage
                 image={photo.image}
                 sizes="(max-width: 768px) 50vw, 33vw"
-                loading={index < 4 ? 'eager' : 'lazy'}
-                fetchPriority={index < 2 ? 'high' : 'auto'}
+                loading={index < 2 ? 'eager' : 'lazy'}
+                fetchPriority={index === 0 ? 'high' : 'auto'}
               />
             </a>
           </div>
