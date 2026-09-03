@@ -1,9 +1,13 @@
-name: Validate React V2
+name: Validate production site
 
 on:
   push:
     branches:
+      - main
       - react-v2
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -22,9 +26,9 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm install
-      - name: Build React SPA
+      - name: Build production site
         env:
-          VITE_BASE_PATH: /pavelkayler.com/
+          VITE_BASE_PATH: ${{ vars.SITE_BASE_PATH || '/pavelkayler.com/' }}
         run: npm run build
       - name: Install media tools
         run: |
@@ -35,7 +39,7 @@ jobs:
         run: |
           node scripts/optimize-production-media.mjs
           python3 scripts/optimize-production-images.py
-      - name: Check SPA output
+      - name: Check production output
         run: |
           test -f dist/index.html
           test -f dist/404.html
@@ -126,12 +130,12 @@ jobs:
           ACTUAL_BYTES=$(du -sb dist | cut -f1)
           echo "Production size: $ACTUAL_BYTES bytes (budget: $MAX_BYTES bytes)"
           if [ "$ACTUAL_BYTES" -gt "$MAX_BYTES" ]; then
-            echo "React production exceeds the 850 MiB Pages budget"
+            echo "Production exceeds the 850 MiB Pages budget"
             exit 1
           fi
 
           du -sh dist
-          echo "React V2 split native build with SEO metadata is valid"
+          echo "Production build is valid"
       - name: Report largest production assets
         run: |
           python3 - <<'PY'
