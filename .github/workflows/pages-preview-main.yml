@@ -1,4 +1,4 @@
-# Preview revision: react-v2-6a2ccbf-2026-09-03
+# Preview revision: react-v2-1082761-2026-09-03
 name: Publish React V2 preview
 
 on:
@@ -47,15 +47,33 @@ jobs:
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/legacy-theme.css
+          test -f dist/robots.txt
+          test -f dist/sitemap.xml
           test -d dist/_app
           test -f dist/works/index.html
           test -f dist/portraits/index.html
           test -f dist/projects/index.html
           test -f dist/brands/index.html
           test -f dist/contacts/index.html
+          test -d dist/assets/social
+          test "$(find dist/assets/social -type f | wc -l)" -eq 6
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
-          ! grep -R "wfolio.ru/card" dist/index.html dist/_app || exit 1
+
+          grep -q 'https://pavelkayler.com/' dist/index.html
+          grep -q 'https://pavelkayler.com/works/' dist/works/index.html
+          grep -q 'https://pavelkayler.com/portraits/' dist/portraits/index.html
+          grep -q 'https://pavelkayler.com/projects/' dist/projects/index.html
+          grep -q 'https://pavelkayler.com/brands/' dist/brands/index.html
+          grep -q 'https://pavelkayler.com/contacts/' dist/contacts/index.html
+          grep -q 'ПОРТРЕТЫ | PAVEL KAYLER' dist/portraits/index.html
+          grep -q 'name="description"' dist/brands/index.html
+          grep -q 'name="twitter:card"' dist/works/index.html
+          grep -q 'property="og:image"' dist/projects/index.html
+          grep -q '<loc>https://pavelkayler.com/works/</loc>' dist/sitemap.xml
+          ! grep -q '\.html</loc>' dist/sitemap.xml || exit 1
+          grep -q 'Sitemap: https://pavelkayler.com/sitemap.xml' dist/robots.txt
+          grep -q 'noindex, nofollow' dist/404.html
 
           test -f dist/assets/mobile-overrides.css
           test -f dist/assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css
@@ -71,16 +89,37 @@ jobs:
           test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUJiZTaR.woff2
           test -f dist/assets/fonts/oswald/TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUJiZTaR.woff2
           grep -q 'assets/fonts/oswald/' dist/legacy-theme.css
-          if grep -R -E 'fonts\.(gstatic|googleapis)\.com' dist --include='*.css' --include='*.html' --include='*.js'; then
-            echo "External Google Fonts reference remains in production"
-            exit 1
-          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          remote_wfolio = re.compile(r"(?i)(?:https?:)?//[^\"'\s)>]*wfolio\.ru")
+          remote_google_fonts = re.compile(r"(?i)fonts\.(?:gstatic|googleapis)\.com")
+          hits = []
+
+          for suffix in ('*.html', '*.css', '*.js'):
+              for path in Path('dist').rglob(suffix):
+                  text = path.read_text('utf-8', errors='ignore')
+                  for pattern, label in ((remote_wfolio, 'remote Wfolio'), (remote_google_fonts, 'Google Fonts')):
+                      match = pattern.search(text)
+                      if match:
+                          hits.append((str(path), label, match.group(0)))
+
+          if hits:
+              for path, label, value in hits:
+                  print(f'{label} URL remains in {path}: {value}')
+              raise SystemExit('Production still contains remote service dependencies')
+
+          print('No remote Wfolio or Google Fonts URLs in production text assets')
+          PY
 
           test ! -f src/components/LegacyPage.tsx
           test ! -f src/generated/structured.ts
           ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
           ! grep -R "generated/structured" src --include='*.ts' --include='*.tsx' || exit 1
           ! grep -q "html: string" src/generated/pages.ts || exit 1
+          grep -q "applyPageMetadata" src/layouts/MainLayout.tsx
 
           MAX_BYTES=$((850 * 1024 * 1024))
           ACTUAL_BYTES=$(du -sb dist | cut -f1)
@@ -90,7 +129,7 @@ jobs:
             exit 1
           fi
 
-          echo "Split native React SPA output is valid"
+          echo "SEO-enabled split native React SPA output is valid"
           du -sh dist
 
       - name: Configure GitHub Pages
