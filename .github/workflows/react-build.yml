@@ -26,6 +26,12 @@ jobs:
         env:
           VITE_BASE_PATH: /pavelkayler.com/
         run: npm run build
+      - name: Install media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Optimize production media
+        run: node scripts/optimize-production-media.mjs
       - name: Check SPA output
         run: |
           test -f dist/index.html
@@ -159,15 +165,11 @@ jobs:
 
           echo
           echo "Cover/video metadata:"
-          if command -v ffprobe >/dev/null 2>&1; then
-            while IFS= read -r -d '' video; do
-              echo "--- $video"
-              ffprobe -v error \
-                -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,bit_rate \
-                -show_entries format=duration,size,bit_rate \
-                -of default=noprint_wrappers=1 \
-                "$video"
-            done < <(find dist -type f -name '*.mp4' -print0)
-          else
-            echo "ffprobe is not available on this runner"
-          fi
+          while IFS= read -r -d '' video; do
+            echo "--- $video"
+            ffprobe -v error \
+              -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,bit_rate \
+              -show_entries format=duration,size,bit_rate \
+              -of default=noprint_wrappers=1 \
+              "$video"
+          done < <(find dist -type f -name '*.mp4' -print0)
