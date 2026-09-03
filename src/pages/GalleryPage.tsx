@@ -8,14 +8,19 @@ import { usePageMeta } from '../hooks/usePageMeta'
 export type AlbumPageKey = 'portraits' | 'projects' | 'brands'
 
 export function GalleryPage({ pageKey, album }: { pageKey: AlbumPageKey; album: AlbumContent }) {
-  usePageMeta(pageKey)
+  const page = usePageMeta(pageKey)
 
   return (
     <div className="react-route native-react-page">
       {album.cover && <AlbumCover cover={album.cover} />}
 
       <main className="page-main js-main">
-        {!album.cover && <LogoSpacer />}
+        {!album.cover && (
+          <>
+            <LogoSpacer />
+            <h1 className="visually-hidden">{page.title}</h1>
+          </>
+        )}
 
         <div className="sections-container -small-pad-before -small-pad-after -medium-width -visible">
           <div className="sections-container-inner"><div className="section-container"><NativeGallery photos={album.photos} /></div></div>
