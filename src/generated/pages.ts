@@ -5,6 +5,7 @@ export interface GeneratedPage {
   path: string
   title: string
   description: string
+  socialImage: string
   bodyClass: string
   hasCover: boolean
 }

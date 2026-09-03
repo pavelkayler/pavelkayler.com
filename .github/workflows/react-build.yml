@@ -31,14 +31,33 @@ jobs:
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/legacy-theme.css
+          test -f dist/robots.txt
+          test -f dist/sitemap.xml
           test -d dist/_app
           test -f dist/works/index.html
           test -f dist/portraits/index.html
           test -f dist/projects/index.html
           test -f dist/brands/index.html
           test -f dist/contacts/index.html
+          test -d dist/assets/social
+          test "$(find dist/assets/social -type f | wc -l)" -eq 6
           grep -q "page-header" dist/legacy-theme.css
           grep -q "\.cover" dist/legacy-theme.css
+
+          grep -q 'https://pavelkayler.com/' dist/index.html
+          grep -q 'https://pavelkayler.com/works/' dist/works/index.html
+          grep -q 'https://pavelkayler.com/portraits/' dist/portraits/index.html
+          grep -q 'https://pavelkayler.com/projects/' dist/projects/index.html
+          grep -q 'https://pavelkayler.com/brands/' dist/brands/index.html
+          grep -q 'https://pavelkayler.com/contacts/' dist/contacts/index.html
+          grep -q 'ПОРТРЕТЫ | PAVEL KAYLER' dist/portraits/index.html
+          grep -q 'name="description"' dist/brands/index.html
+          grep -q 'name="twitter:card"' dist/works/index.html
+          grep -q 'property="og:image"' dist/projects/index.html
+          grep -q '<loc>https://pavelkayler.com/works/</loc>' dist/sitemap.xml
+          ! grep -q '\.html</loc>' dist/sitemap.xml || exit 1
+          grep -q 'Sitemap: https://pavelkayler.com/sitemap.xml' dist/robots.txt
+          grep -q 'noindex, nofollow' dist/404.html
 
           test -f dist/assets/mobile-overrides.css
           test -f dist/assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css
@@ -86,6 +105,7 @@ jobs:
           ! grep -R "dangerouslySetInnerHTML" src --include='*.ts' --include='*.tsx' || exit 1
           ! grep -R "generated/structured" src --include='*.ts' --include='*.tsx' || exit 1
           ! grep -q "html: string" src/generated/pages.ts || exit 1
+          grep -q "applyPageMetadata" src/layouts/MainLayout.tsx
 
           MAX_BYTES=$((850 * 1024 * 1024))
           ACTUAL_BYTES=$(du -sb dist | cut -f1)
@@ -96,4 +116,4 @@ jobs:
           fi
 
           du -sh dist
-          echo "React V2 split native build is valid"
+          echo "React V2 split native build with SEO metadata is valid"

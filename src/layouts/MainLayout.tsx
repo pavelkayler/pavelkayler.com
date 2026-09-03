@@ -5,6 +5,7 @@ import { Footer } from '../components/Footer'
 import { SiteLogo } from '../components/SiteLogo'
 import { pages, type PageKey } from '../generated/pages'
 import { scheduleRouteWarmup } from '../app/prefetch'
+import { applyPageMetadata } from '../app/seo'
 
 const routeToKey: Record<string, PageKey> = {
   '/': 'home',
@@ -15,11 +16,20 @@ const routeToKey: Record<string, PageKey> = {
   '/contacts': 'contacts',
 }
 
+function normalizePath(pathname: string) {
+  if (pathname === '/') return '/'
+  return pathname.replace(/\/+$/, '') || '/'
+}
+
 export function MainLayout() {
   const { pathname } = useLocation()
-  const page = pages[routeToKey[pathname] ?? 'home']
+  const normalizedPath = normalizePath(pathname)
+  const page = pages[routeToKey[normalizedPath] ?? 'home']
 
-  useEffect(() => scheduleRouteWarmup(pathname), [pathname])
+  useEffect(() => {
+    applyPageMetadata(page)
+    return scheduleRouteWarmup(normalizedPath)
+  }, [normalizedPath, page])
 
   return (
     <div className="page-wrapper react-page-wrapper">

@@ -2,22 +2,32 @@
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { load } from 'cheerio'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = path.join(ROOT, 'dist')
 const manifest = JSON.parse(await readFile(path.join(ROOT, 'src/generated/asset-manifest.json'), 'utf8'))
+const pages = JSON.parse(await readFile(path.join(ROOT, 'src/generated/pages.json'), 'utf8'))
+const socialImages = JSON.parse(await readFile(path.join(ROOT, 'src/generated/social-images.json'), 'utf8'))
+const SITE_ORIGIN = 'https://pavelkayler.com'
+const SITE_NAME = 'Pavel Kayler | Photographer'
+const ROBOTS = 'follow, index, max-snippet:-1, max-video-preview:-1, max-image-preview:large'
 
-async function copyAsset(relativePath) {
-  const source = path.join(ROOT, relativePath)
-  const target = path.join(DIST, relativePath)
+async function copyAssetTo(sourceRelativePath, targetRelativePath) {
+  const source = path.join(ROOT, sourceRelativePath)
+  const target = path.join(DIST, targetRelativePath)
   try {
     const info = await stat(source)
     if (!info.isFile()) return
     await mkdir(path.dirname(target), { recursive: true })
     await copyFile(source, target)
   } catch {
-    throw new Error(`Missing generated asset: ${relativePath}`)
+    throw new Error(`Missing generated asset: ${sourceRelativePath}`)
   }
+}
+
+async function copyAsset(relativePath) {
+  await copyAssetTo(relativePath, relativePath)
 }
 
 const oswaldV49Files = [
@@ -103,17 +113,140 @@ for (const asset of runtimeAssets) await copyAsset(asset)
 await copyFile(path.join(ROOT, 'favicon.ico'), path.join(DIST, 'favicon.ico'))
 
 for (const asset of manifest) await copyAsset(asset)
+for (const image of socialImages) await copyAssetTo(image.source, image.target)
 
-// BrowserRouter on GitHub Pages: create actual index files for every public route so
-// direct navigation and refresh return HTTP 200 instead of relying on the 404 shell.
-for (const route of ['works', 'portraits', 'projects', 'brands', 'contacts']) {
-  const routeDir = path.join(DIST, route)
-  await mkdir(routeDir, { recursive: true })
-  await copyFile(path.join(DIST, 'index.html'), path.join(routeDir, 'index.html'))
+await copyFile(path.join(ROOT, 'robots.txt'), path.join(DIST, 'robots.txt'))
+await copyFile(path.join(ROOT, 'sitemap.xml'), path.join(DIST, 'sitemap.xml'))
+
+function canonicalUrl(page) {
+  if (page.path === '/') return `${SITE_ORIGIN}/`
+  return `${SITE_ORIGIN}${page.path.replace(/\/+$/, '')}/`
 }
 
-// Keep a generic fallback as a safety net for unknown/deep links.
-await copyFile(path.join(DIST, 'index.html'), path.join(DIST, '404.html'))
+function socialImageUrl(page) {
+  if (!page.socialImage) return ''
+  return `${SITE_ORIGIN}${page.socialImage.startsWith('/') ? page.socialImage : `/${page.socialImage}`}`
+}
+
+function setMeta($, attribute, key, content) {
+  let element = $(`meta[${attribute}="${key}"]`).first()
+  if (!element.length) {
+    $('head').append(`<meta ${attribute}="${key}">`)
+    element = $(`meta[${attribute}="${key}"]`).first()
+  }
+  element.attr('content', content)
+}
+
+function removeMeta($, attribute, key) {
+  $(`meta[${attribute}="${key}"]`).remove()
+}
+
+function setCanonical($, href) {
+  let element = $('link[rel="canonical"]').first()
+  if (!element.length) {
+    $('head').append('<link rel="canonical">')
+    element = $('link[rel="canonical"]').first()
+  }
+  element.attr('href', href)
+}
+
+function setStructuredData($, page, canonical) {
+  let element = $('script[type="application/ld+json"][data-seo-schema]').first()
+  if (!element.length) {
+    $('head').append('<script type="application/ld+json" data-seo-schema></script>')
+    element = $('script[type="application/ld+json"][data-seo-schema]').first()
+  }
+
+  const schema = page.path === '/'
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: SITE_NAME,
+        url: canonical,
+      }
+    : {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: page.title,
+        description: page.description,
+        url: canonical,
+        isPartOf: {
+          '@type': 'WebSite',
+          name: SITE_NAME,
+          url: `${SITE_ORIGIN}/`,
+        },
+      }
+
+  element.text(JSON.stringify(schema))
+}
+
+function renderSeoShell(shell, page) {
+  const $ = load(shell, { decodeEntities: false })
+  const canonical = canonicalUrl(page)
+  const socialImage = socialImageUrl(page)
+
+  $('html').attr('lang', 'ru')
+  $('title').text(page.title)
+  setCanonical($, canonical)
+
+  setMeta($, 'name', 'description', page.description)
+  setMeta($, 'name', 'robots', ROBOTS)
+  setMeta($, 'name', 'yandex-verification', '1c1709d7e995c421')
+  setMeta($, 'name', 'google-site-verification', 'DBpBXjMNQuj0EGQLO3MwtrO-rJ8OmpT6NQ0HmomTFbY')
+
+  setMeta($, 'property', 'og:title', page.title)
+  setMeta($, 'property', 'og:description', page.description)
+  setMeta($, 'property', 'og:type', 'website')
+  setMeta($, 'property', 'og:locale', 'ru_RU')
+  setMeta($, 'property', 'og:site_name', SITE_NAME)
+  setMeta($, 'property', 'og:url', canonical)
+
+  setMeta($, 'name', 'twitter:card', 'summary_large_image')
+  setMeta($, 'name', 'twitter:domain', 'pavelkayler.com')
+  setMeta($, 'name', 'twitter:url', canonical)
+  setMeta($, 'name', 'twitter:title', page.title)
+  setMeta($, 'name', 'twitter:description', page.description)
+
+  if (socialImage) {
+    setMeta($, 'property', 'og:image', socialImage)
+    setMeta($, 'property', 'vk:image', socialImage)
+    setMeta($, 'name', 'twitter:image', socialImage)
+  } else {
+    removeMeta($, 'property', 'og:image')
+    removeMeta($, 'property', 'vk:image')
+    removeMeta($, 'name', 'twitter:image')
+  }
+
+  setStructuredData($, page, canonical)
+  return $.html()
+}
+
+const shell = await readFile(path.join(DIST, 'index.html'), 'utf8')
+
+// BrowserRouter on GitHub Pages: create actual index files for every public route so
+// direct navigation and refresh return HTTP 200. Each shell receives route-specific SEO
+// before it is written, rather than publishing six identical copies of the home head.
+for (const page of Object.values(pages)) {
+  if (page.path === '/') {
+    await writeFile(path.join(DIST, 'index.html'), renderSeoShell(shell, page))
+    continue
+  }
+
+  const routeName = page.path.replace(/^\/+|\/+$/g, '')
+  const routeDir = path.join(DIST, routeName)
+  await mkdir(routeDir, { recursive: true })
+  await writeFile(path.join(routeDir, 'index.html'), renderSeoShell(shell, page))
+}
+
+// Keep a generic fallback as a safety net for unknown/deep links. It should never be
+// indexed as a page of its own; React will redirect an unknown route to the home page.
+const $404 = load(shell, { decodeEntities: false })
+$404('title').text('Страница не найдена | PAVEL KAYLER')
+setMeta($404, 'name', 'robots', 'noindex, nofollow')
+$404('link[rel="canonical"]').remove()
+$404('meta[property="og:url"]').remove()
+$404('meta[name="twitter:url"]').remove()
+await writeFile(path.join(DIST, '404.html'), $404.html())
 
 let total = 0
 async function walk(directory) {
@@ -126,5 +259,5 @@ async function walk(directory) {
 }
 await walk(DIST)
 console.log(
-  `React dist size: ${(total / 1024 / 1024).toFixed(1)} MiB; copied ${manifest.length} selected media assets, ${runtimeAssets.length} runtime assets, and ${oswaldV49Files.length} vendored Oswald files.`,
+  `React dist size: ${(total / 1024 / 1024).toFixed(1)} MiB; copied ${manifest.length} selected media assets, ${runtimeAssets.length} runtime assets, ${socialImages.length} social images, and ${oswaldV49Files.length} vendored Oswald files.`,
 )
