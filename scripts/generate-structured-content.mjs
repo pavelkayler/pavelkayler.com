@@ -22,7 +22,10 @@ const assets = new Set()
 const srcsetTargets = {
   home: [600, 1240, 1880, 2520],
   listing: [600, 1240, 1880],
-  gallery: [600, 1240, 2520],
+  // Gallery cards render at 50vw on mobile and 33vw on desktop. A ~1880px
+  // candidate already leaves generous DPR headroom; the separate PhotoSwipe
+  // source remains full-resolution for lightbox viewing.
+  gallery: [600, 1240, 1880],
   contact: [600, 1240, 1880],
 }
 const MAX_FULLSCREEN_PIXELS = 8_000_000
