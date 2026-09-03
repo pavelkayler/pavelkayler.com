@@ -1,11 +1,22 @@
 import { Link } from 'react-router-dom'
+import { prefetchRoute } from '../app/prefetch'
 import { siteLogo } from '../generated/content/site'
 import { resolveAsset } from './StructuredImage'
 
 export function SiteLogo() {
+  const warmHome = () => prefetchRoute('/')
+
   return (
     <div className="logo js-logo -visible">
-      <Link className="logo-link" title="pavelkayler.com" to="/" viewTransition>
+      <Link
+        className="logo-link"
+        title="pavelkayler.com"
+        to="/"
+        viewTransition
+        onPointerEnter={warmHome}
+        onFocus={warmHome}
+        onPointerDown={warmHome}
+      >
         <span className="logo-with-placeholder -light-logo" style={{ maxWidth: siteLogo.maxWidth }}>
           <canvas
             className="logo-placeholder"

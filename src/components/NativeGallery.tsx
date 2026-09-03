@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
+import Masonry from 'masonry-layout'
 import type { GalleryPhoto } from '../content/types'
 import { resolveAsset, StructuredImage } from './StructuredImage'
 
@@ -10,15 +11,27 @@ interface Props {
 export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
   const galleryRef = useRef<HTMLDivElement>(null)
 
+  useLayoutEffect(() => {
+    const gallery = galleryRef.current
+    if (!gallery) return
+
+    const masonry = new Masonry(gallery, {
+      itemSelector: '.piece',
+      percentPosition: true,
+      transitionDuration: 0,
+    })
+    masonry.layout?.()
+
+    return () => masonry.destroy?.()
+  }, [photos])
+
   useEffect(() => {
     const gallery = galleryRef.current
     if (!gallery) return
 
-    let masonry: { layout?: () => void; destroy?: () => void } | null = null
     let lightbox: { init: () => void; destroy: () => void } | null = null
     let observer: IntersectionObserver | null = null
-    let frameA = 0
-    let frameB = 0
+    let frame = 0
     let initialized = false
     let cancelled = false
 
@@ -26,34 +39,22 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
       if (initialized || cancelled) return
       initialized = true
 
-      frameA = requestAnimationFrame(() => {
-        frameB = requestAnimationFrame(async () => {
-          if (!gallery.isConnected || cancelled) return
+      frame = requestAnimationFrame(async () => {
+        if (!gallery.isConnected || cancelled) return
 
-          const [{ default: Masonry }, { default: PhotoSwipeLightbox }] = await Promise.all([
-            import('masonry-layout'),
-            import('photoswipe/lightbox'),
-          ])
-          if (!gallery.isConnected || cancelled) return
+        const { default: PhotoSwipeLightbox } = await import('photoswipe/lightbox')
+        if (!gallery.isConnected || cancelled) return
 
-          masonry = new Masonry(gallery, {
-            itemSelector: '.piece',
-            percentPosition: true,
-            transitionDuration: 0,
-          })
-          masonry.layout?.()
-
-          lightbox = new PhotoSwipeLightbox({
-            gallery,
-            children: 'a.js-gallery-link',
-            pswpModule: () => import('photoswipe'),
-            bgOpacity: 0.96,
-            preload: [1, 2],
-            wheelToZoom: true,
-            showHideAnimationType: 'fade',
-          })
-          lightbox.init()
+        lightbox = new PhotoSwipeLightbox({
+          gallery,
+          children: 'a.js-gallery-link',
+          pswpModule: () => import('photoswipe'),
+          bgOpacity: 0.96,
+          preload: [1, 2],
+          wheelToZoom: true,
+          showHideAnimationType: 'fade',
         })
+        lightbox.init()
       })
     }
 
@@ -75,10 +76,8 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     return () => {
       cancelled = true
       observer?.disconnect()
-      cancelAnimationFrame(frameA)
-      cancelAnimationFrame(frameB)
+      cancelAnimationFrame(frame)
       lightbox?.destroy()
-      masonry?.destroy?.()
     }
   }, [photos])
 
