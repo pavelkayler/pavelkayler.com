@@ -26,6 +26,7 @@ export function MainLayout() {
   const normalizedPath = normalizePath(pathname)
   const pageKey = routeToKey[normalizedPath]
   const page = pageKey ? pages[pageKey] : undefined
+  const isHomeRoute = normalizedPath === '/'
 
   useLayoutEffect(() => {
     if (page) applyPageMetadata(page)
@@ -34,7 +35,7 @@ export function MainLayout() {
   useEffect(() => scheduleRouteWarmup(normalizedPath), [normalizedPath])
 
   return (
-    <div className="page-wrapper react-page-wrapper">
+    <div className={`page-wrapper react-page-wrapper${isHomeRoute ? ' is-home-route' : ''}`}>
       <Header overlay={page?.hasCover ?? false} />
       <div className="persistent-site-logo">
         <SiteLogo />
