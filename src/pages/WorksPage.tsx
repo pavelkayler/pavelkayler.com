@@ -9,7 +9,7 @@ export function WorksPage() {
   usePageMeta('works')
 
   return (
-    <div className="react-route native-react-page">
+    <div className="react-route native-react-page works-route">
       <main className="page-main js-main">
         <LogoSpacer />
         <h1 className="works-page-title">Works</h1>
