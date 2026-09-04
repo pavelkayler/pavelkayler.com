@@ -63,6 +63,10 @@ body {
   transition: color 180ms ease-out, opacity 180ms ease-out;
 }
 
+.page-header .menu-list .link.-disabled {
+  cursor: default;
+}
+
 /* The brand mark is now owned by MainLayout, so React Router route changes never
    unmount or reposition it. 92px is the exact desktop top position produced by
    the original HOME cover: 32px cover-wrapper margin + 60px cover-header padding. */
@@ -171,7 +175,10 @@ body {
     top: 88px;
   }
 
+  /* The inner-page header itself remains on screen while scrolling, so the centred
+     brand mark has to use the viewport as its positioning context as well. */
   .react-page-wrapper:not(.is-home-route) .persistent-site-logo {
+    position: fixed;
     top: 18px;
     width: clamp(86px, 23vw, 104px);
     height: auto;
