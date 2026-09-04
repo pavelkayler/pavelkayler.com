@@ -1,0 +1,79 @@
+name: Finalize source migration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/finalize-source-migration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate final frozen source snapshot
+        env:
+          VITE_BASE_PATH: /
+        run: npm run build
+
+      - name: Detach source from migration archive
+        run: node scripts/finalize-source-migration.mjs
+
+      - name: Remove one-time cleanup machinery
+        run: |
+          rm -f scripts/finalize-source-migration.mjs
+          rm -f .github/workflows/finalize-source-migration.yml
+
+      - name: Verify clean source builds independently
+        env:
+          VITE_BASE_PATH: /
+        run: |
+          npm run build
+          test -f dist/index.html
+          test -f dist/site-theme.css
+          test -d dist/media/images
+          test -d media/images
+          test -d media/video
+          test ! -d legacy-source
+          test ! -d i.wfolio.ru
+          test ! -d static.wfolio.ru
+          test ! -d vp.wfolio.ru
+          test ! -d wfolio
+          test ! -d mc.yandex.ru
+          test ! -f works.html
+          test ! -f portraits.html
+          test ! -f projects.html
+          test ! -f brands.html
+          test ! -f contacts.html
+          test ! -f scripts/generate-react-content.mjs
+          test ! -f scripts/generate-structured-content.mjs
+          ! grep -R 'wfolio\.ru/' src/generated scripts --include='*.ts' --include='*.json' --include='*.mjs' --include='*.py'
+
+      - name: Commit cleaned production source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git diff --cached --check
+          git commit -m "Finalize standalone source migration"
+          git push origin HEAD:main
