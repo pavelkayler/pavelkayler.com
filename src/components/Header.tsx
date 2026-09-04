@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { prefetchRoute } from '../app/prefetch'
 
 const socials = [
@@ -14,7 +14,14 @@ const nav = [
   { to: '/contacts', label: 'CONTACTS' },
 ]
 
+function normalizePath(pathname: string) {
+  if (pathname === '/') return '/'
+  return pathname.replace(/\/+$/, '') || '/'
+}
+
 export function Header({ overlay = false }: { overlay?: boolean }) {
+  const { pathname } = useLocation()
+  const currentPath = normalizePath(pathname)
   const warmRoute = (path: string) => () => prefetchRoute(path)
 
   return (
@@ -33,21 +40,31 @@ export function Header({ overlay = false }: { overlay?: boolean }) {
             </ul>
           </div>
           <ul className="menu-list js-menu-list">
-            {nav.map((item) => (
-              <li className="menu-item js-menu-item" key={item.to}>
-                <NavLink
-                  className={({ isActive }) => `link${isActive ? ' -active' : ''}`}
-                  to={item.to}
-                  end={item.to === '/'}
-                  viewTransition
-                  onPointerEnter={warmRoute(item.to)}
-                  onFocus={warmRoute(item.to)}
-                  onPointerDown={warmRoute(item.to)}
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
+            {nav.map((item) => {
+              const isCurrent = currentPath === item.to
+
+              return (
+                <li className="menu-item js-menu-item" key={item.to}>
+                  {isCurrent ? (
+                    <span className="link -active -disabled" aria-current="page" aria-disabled="true">
+                      {item.label}
+                    </span>
+                  ) : (
+                    <NavLink
+                      className="link"
+                      to={item.to}
+                      end={item.to === '/'}
+                      viewTransition
+                      onPointerEnter={warmRoute(item.to)}
+                      onFocus={warmRoute(item.to)}
+                      onPointerDown={warmRoute(item.to)}
+                    >
+                      {item.label}
+                    </NavLink>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       </div>
