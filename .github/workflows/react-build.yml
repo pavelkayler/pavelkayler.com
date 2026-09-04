@@ -30,6 +30,15 @@ jobs:
         env:
           VITE_BASE_PATH: ${{ vars.SITE_BASE_PATH || '/pavelkayler.com/' }}
         run: npm run build
+      - name: Capture generated migration outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-generated-source
+          path: |
+            src/generated
+            dist/legacy-theme.css
+          if-no-files-found: error
+          retention-days: 1
       - name: Install media tools
         run: |
           sudo apt-get update -qq
