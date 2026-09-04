@@ -165,26 +165,42 @@ body {
 }
 
 @media (max-width: 768px) {
-  /* On phones the brand mark becomes the centre cell of the header instead of
-     occupying a second visual row below the navigation. Keep it just larger than
-     the menu labels while leaving the social and navigation groups clear. */
-  .persistent-site-logo {
+  /* HOME keeps the original large brand mark below the navigation. Only inner pages
+     compress the same persistent logo into the centre of the mobile header. */
+  .react-page-wrapper.is-home-route .persistent-site-logo {
+    top: 88px;
+  }
+
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo {
     top: 18px;
     width: clamp(86px, 23vw, 104px);
     height: auto;
   }
 
-  .persistent-site-logo .logo-with-placeholder {
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-with-placeholder {
     width: 100%;
     max-width: 100% !important;
   }
 
-  .persistent-site-logo .logo-image {
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-image {
     display: block;
     width: 100% !important;
     height: auto !important;
     max-width: 100% !important;
     max-height: none !important;
+  }
+
+  /* Slightly increase mobile navigation legibility without letting the three labels
+     collide with the centred logo on narrower phones. */
+  .page-header .menu-list .link {
+    font-size: clamp(9px, 2.5vw, 11px);
+  }
+
+  /* WORKS no longer needs the old 35px logo placeholder on mobile because its logo
+     now lives inside the header. Removing only this spacer pulls the title up to the
+     same visual top guide used by the inner-page content instead of leaving dead space. */
+  .works-route .route-logo-spacer {
+    display: none;
   }
 
   /* Match the mobile sections-container gutter so the heading begins exactly at
@@ -242,7 +258,7 @@ body {
 }
 
 @media (max-width: 360px) {
-  .persistent-site-logo {
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo {
     width: 78px;
   }
 }
