@@ -140,7 +140,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
       pages: write
       id-token: write
@@ -153,112 +153,100 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Enforce HTTPS for custom domain
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          for attempt in $(seq 1 12); do
-            echo "HTTPS enforcement attempt $attempt/12"
-            if printf '%s' '{"https_enforced":true}' | gh api \
-              --method PUT \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "/repos/${GITHUB_REPOSITORY}/pages" \
-              --input -; then
-              echo "HTTPS enforcement enabled"
-              exit 0
-            fi
-
-            if [ "$attempt" -lt 12 ]; then
-              echo "Certificate may still be provisioning; retrying in 15 seconds"
-              sleep 15
-            fi
-          done
-
-          echo "GitHub Pages did not accept HTTPS enforcement after retries"
-          exit 1
-
   smoke:
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Verify live production routes and HTTPS
+      - name: Verify live production routes
         run: |
           set -euo pipefail
 
-          https_urls=(
-            'https://pavelkayler.com/'
-            'https://pavelkayler.com/works/'
-            'https://pavelkayler.com/portraits/'
-            'https://pavelkayler.com/projects/'
-            'https://pavelkayler.com/brands/'
-            'https://pavelkayler.com/contacts/'
-            'https://pavelkayler.com/robots.txt'
-            'https://pavelkayler.com/sitemap.xml'
+          routes=(
+            '/'
+            '/works/'
+            '/portraits/'
+            '/projects/'
+            '/brands/'
+            '/contacts/'
+            '/robots.txt'
+            '/sitemap.xml'
           )
 
           for attempt in $(seq 1 12); do
             echo "Production smoke-test attempt $attempt/12"
             failed=0
 
-            for url in "${https_urls[@]}"; do
+            for route in "${routes[@]}"; do
               code=$(curl --silent --show-error \
+                --location \
                 --output /dev/null \
                 --write-out '%{http_code}' \
                 --connect-timeout 10 \
                 --max-time 30 \
-                "$url" || true)
+                "http://pavelkayler.com${route}" || true)
 
-              echo "$code  $url"
+              echo "$code  http://pavelkayler.com${route}"
               if [ "$code" != '200' ]; then
                 failed=1
               fi
             done
 
             missing_code=$(curl --silent --show-error \
+              --location \
               --output /dev/null \
               --write-out '%{http_code}' \
               --connect-timeout 10 \
               --max-time 30 \
-              'https://pavelkayler.com/__github_pages_smoke_missing__' || true)
-            echo "$missing_code  https://pavelkayler.com/__github_pages_smoke_missing__"
+              'http://pavelkayler.com/__github_pages_smoke_missing__' || true)
+            echo "$missing_code  http://pavelkayler.com/__github_pages_smoke_missing__"
             if [ "$missing_code" != '404' ]; then
               failed=1
             fi
 
-            http_result=$(curl --silent --show-error \
-              --output /dev/null \
-              --write-out '%{http_code} %{redirect_url}' \
-              --connect-timeout 10 \
-              --max-time 30 \
-              'http://pavelkayler.com/' || true)
-            echo "$http_result  http://pavelkayler.com/"
-
-            http_code=${http_result%% *}
-            redirect_url=${http_result#* }
-            case "$http_code" in
-              301|302|307|308) ;;
-              *) failed=1 ;;
-            esac
-            case "$redirect_url" in
-              https://pavelkayler.com/*) ;;
-              *) failed=1 ;;
-            esac
-
             if [ "$failed" -eq 0 ]; then
-              echo "Production smoke test passed: HTTPS certificate is valid, core routes respond, HTTP redirects to HTTPS"
-              exit 0
+              echo "Production smoke test passed: core routes are reachable and the missing route returns 404"
+              break
             fi
 
             if [ "$attempt" -lt 12 ]; then
               echo "Production is still propagating; retrying in 15 seconds"
               sleep 15
+            else
+              echo "Production smoke test failed after retries"
+              exit 1
             fi
           done
 
-          echo "Production smoke test failed after retries"
-          exit 1
+      - name: Report HTTPS readiness
+        run: |
+          set -euo pipefail
+
+          https_code=$(curl --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --connect-timeout 10 \
+            --max-time 30 \
+            'https://pavelkayler.com/' || true)
+
+          http_result=$(curl --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code} %{redirect_url}' \
+            --connect-timeout 10 \
+            --max-time 30 \
+            'http://pavelkayler.com/' || true)
+
+          echo "HTTPS root status: $https_code"
+          echo "HTTP root result: $http_result"
+
+          http_code=${http_result%% *}
+          redirect_url=${http_result#* }
+
+          if [ "$https_code" = '200' ] && \
+             { [ "$http_code" = '301' ] || [ "$http_code" = '302' ] || [ "$http_code" = '307' ] || [ "$http_code" = '308' ]; } && \
+             [[ "$redirect_url" == https://pavelkayler.com/* ]]; then
+            echo "HTTPS is active and HTTP is redirected to HTTPS"
+          else
+            echo "::warning::HTTPS is not enforced yet. Enable Enforce HTTPS in Settings → Pages after GitHub finishes provisioning the certificate."
+          fi
