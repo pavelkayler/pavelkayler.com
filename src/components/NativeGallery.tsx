@@ -8,6 +8,12 @@ interface Props {
   prioritizeFirst?: boolean
 }
 
+type LightboxInstance = {
+  init: () => void
+  destroy: () => void
+  loadAndOpen: (index: number) => boolean
+}
+
 export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
   const galleryRef = useRef<HTMLDivElement>(null)
 
@@ -29,23 +35,18 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     const gallery = galleryRef.current
     if (!gallery) return
 
-    let lightbox: { init: () => void; destroy: () => void } | null = null
-    let observer: IntersectionObserver | null = null
-    let frame = 0
-    let initialized = false
+    let lightbox: LightboxInstance | null = null
+    let initialization: Promise<LightboxInstance | null> | null = null
     let cancelled = false
 
-    const initialize = () => {
-      if (initialized || cancelled) return
-      initialized = true
+    const ensureLightbox = () => {
+      if (lightbox) return Promise.resolve(lightbox)
+      if (initialization) return initialization
 
-      frame = requestAnimationFrame(async () => {
-        if (!gallery.isConnected || cancelled) return
+      initialization = import('photoswipe/lightbox').then(({ default: PhotoSwipeLightbox }) => {
+        if (!gallery.isConnected || cancelled) return null
 
-        const { default: PhotoSwipeLightbox } = await import('photoswipe/lightbox')
-        if (!gallery.isConnected || cancelled) return
-
-        lightbox = new PhotoSwipeLightbox({
+        const instance = new PhotoSwipeLightbox({
           gallery,
           children: 'a.js-gallery-link',
           pswpModule: () => import('photoswipe'),
@@ -53,30 +54,51 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
           preload: [1, 2],
           wheelToZoom: true,
           showHideAnimationType: 'fade',
-        })
-        lightbox.init()
+        }) as LightboxInstance
+
+        instance.init()
+        lightbox = instance
+        return instance
+      })
+
+      return initialization
+    }
+
+    // A gallery route is already an explicit user intent to browse photographs, so
+    // initialize its small lightbox controller immediately. The previous viewport
+    // observer could miss an absolutely-positioned Masonry container and leave every
+    // photo as a plain link with no PhotoSwipe handler attached.
+    void ensureLightbox()
+
+    // Also cover the short interval while the dynamic module is downloading. If the
+    // first tap arrives before init() completes, keep the browser on the gallery and
+    // open that exact photograph as soon as PhotoSwipe is ready.
+    const handleEarlyClick = (event: MouseEvent) => {
+      if (lightbox || cancelled) return
+
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      const anchor = target.closest('a.js-gallery-link')
+      if (!(anchor instanceof HTMLAnchorElement) || !gallery.contains(anchor)) return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const links = Array.from(gallery.querySelectorAll<HTMLAnchorElement>('a.js-gallery-link'))
+      const index = links.indexOf(anchor)
+      if (index < 0) return
+
+      void ensureLightbox().then((instance) => {
+        if (!cancelled) instance?.loadAndOpen(index)
       })
     }
 
-    if ('IntersectionObserver' in window) {
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) {
-            observer?.disconnect()
-            initialize()
-          }
-        },
-        { rootMargin: '1200px 0px' },
-      )
-      observer.observe(gallery)
-    } else {
-      initialize()
-    }
+    gallery.addEventListener('click', handleEarlyClick, true)
 
     return () => {
       cancelled = true
-      observer?.disconnect()
-      cancelAnimationFrame(frame)
+      gallery.removeEventListener('click', handleEarlyClick, true)
       lightbox?.destroy()
     }
   }, [photos])
