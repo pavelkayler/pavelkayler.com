@@ -100,6 +100,16 @@ body {
   visibility: hidden;
 }
 
+/* WORKS heading shares the same horizontal content line as the first card rather
+   than starting at the browser edge. The desktop Wfolio full-width section leaves
+   50px gutters on either side. */
+.works-page-title {
+  width: calc(100% - 100px);
+  margin-right: auto;
+  margin-left: auto;
+  box-sizing: border-box;
+}
+
 /* Wfolio's runtime used to add these ready/visible states after page initialization.
    React renders the route immediately, so never leave content waiting for removed JS. */
 .react-route .sections-container:not(.-no-animations) .sections-container-inner,
@@ -155,10 +165,33 @@ body {
 }
 
 @media (max-width: 768px) {
-  /* HOME uses a 28px wrapper top margin on mobile instead of 32px; the original
-     60px cover-header padding stays unchanged, therefore its logo begins at 88px. */
+  /* On phones the brand mark becomes the centre cell of the header instead of
+     occupying a second visual row below the navigation. Keep it just larger than
+     the menu labels while leaving the social and navigation groups clear. */
   .persistent-site-logo {
-    top: 88px;
+    top: 18px;
+    width: clamp(86px, 23vw, 104px);
+    height: auto;
+  }
+
+  .persistent-site-logo .logo-with-placeholder {
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .persistent-site-logo .logo-image {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: none !important;
+  }
+
+  /* Match the mobile sections-container gutter so the heading begins exactly at
+     the left edge of the first WORKS photograph. */
+  .works-page-title {
+    width: 100%;
+    max-width: calc(100% - 32px);
   }
 
   /* The exported Wfolio slider kept each image at its source aspect ratio on phones,
@@ -199,8 +232,18 @@ body {
 }
 
 @media (max-width: 420px) {
+  .works-page-title {
+    max-width: calc(100% - 24px);
+  }
+
   .react-route .album-masonry .piece {
     width: 50%;
+  }
+}
+
+@media (max-width: 360px) {
+  .persistent-site-logo {
+    width: 78px;
   }
 }
 
