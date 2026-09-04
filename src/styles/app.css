@@ -161,6 +161,38 @@ body {
     top: 88px;
   }
 
+  /* The exported Wfolio slider kept each image at its source aspect ratio on phones,
+     leaving most of the full-screen cover as a flat overlay. HOME is a true viewport
+     hero: every slider layer fills the current mobile viewport and the photograph is
+     cropped with object-fit: cover instead of shrinking to a horizontal strip. */
+  .react-route .cover.-fullscreen {
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100svh;
+    overflow: hidden;
+  }
+
+  .react-route .cover.-fullscreen .native-home-slider,
+  .react-route .cover.-fullscreen .native-home-slider .slider-viewport,
+  .react-route .cover.-fullscreen .native-home-slider .slides,
+  .react-route .cover.-fullscreen .native-home-slider .slide,
+  .react-route .cover.-fullscreen .native-home-slider .lazy-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .react-route .cover.-fullscreen .native-home-slider .lazy-image > img,
+  .react-route .cover.-fullscreen .native-home-slider .lazy-image > .placeholder {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: cover;
+  }
+
   .react-route .album-masonry .piece {
     width: 50%;
   }
