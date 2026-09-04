@@ -140,7 +140,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write
@@ -152,3 +152,113 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Enforce HTTPS for custom domain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 12); do
+            echo "HTTPS enforcement attempt $attempt/12"
+            if printf '%s' '{"https_enforced":true}' | gh api \
+              --method PUT \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "/repos/${GITHUB_REPOSITORY}/pages" \
+              --input -; then
+              echo "HTTPS enforcement enabled"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 12 ]; then
+              echo "Certificate may still be provisioning; retrying in 15 seconds"
+              sleep 15
+            fi
+          done
+
+          echo "GitHub Pages did not accept HTTPS enforcement after retries"
+          exit 1
+
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Verify live production routes and HTTPS
+        run: |
+          set -euo pipefail
+
+          https_urls=(
+            'https://pavelkayler.com/'
+            'https://pavelkayler.com/works/'
+            'https://pavelkayler.com/portraits/'
+            'https://pavelkayler.com/projects/'
+            'https://pavelkayler.com/brands/'
+            'https://pavelkayler.com/contacts/'
+            'https://pavelkayler.com/robots.txt'
+            'https://pavelkayler.com/sitemap.xml'
+          )
+
+          for attempt in $(seq 1 12); do
+            echo "Production smoke-test attempt $attempt/12"
+            failed=0
+
+            for url in "${https_urls[@]}"; do
+              code=$(curl --silent --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                --connect-timeout 10 \
+                --max-time 30 \
+                "$url" || true)
+
+              echo "$code  $url"
+              if [ "$code" != '200' ]; then
+                failed=1
+              fi
+            done
+
+            missing_code=$(curl --silent --show-error \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              --connect-timeout 10 \
+              --max-time 30 \
+              'https://pavelkayler.com/__github_pages_smoke_missing__' || true)
+            echo "$missing_code  https://pavelkayler.com/__github_pages_smoke_missing__"
+            if [ "$missing_code" != '404' ]; then
+              failed=1
+            fi
+
+            http_result=$(curl --silent --show-error \
+              --output /dev/null \
+              --write-out '%{http_code} %{redirect_url}' \
+              --connect-timeout 10 \
+              --max-time 30 \
+              'http://pavelkayler.com/' || true)
+            echo "$http_result  http://pavelkayler.com/"
+
+            http_code=${http_result%% *}
+            redirect_url=${http_result#* }
+            case "$http_code" in
+              301|302|307|308) ;;
+              *) failed=1 ;;
+            esac
+            case "$redirect_url" in
+              https://pavelkayler.com/*) ;;
+              *) failed=1 ;;
+            esac
+
+            if [ "$failed" -eq 0 ]; then
+              echo "Production smoke test passed: HTTPS certificate is valid, core routes respond, HTTP redirects to HTTPS"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 12 ]; then
+              echo "Production is still propagating; retrying in 15 seconds"
+              sleep 15
+            fi
+          done
+
+          echo "Production smoke test failed after retries"
+          exit 1
