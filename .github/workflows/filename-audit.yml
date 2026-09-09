@@ -1,0 +1,50 @@
+name: Audit descriptive asset names
+on:
+  push:
+    branches: [refactor/descriptive-asset-names]
+    paths: [.github/workflows/filename-audit.yml]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 -m pip install --quiet pillow
+      - name: Inventory tracked source and media without changing files
+        run: |
+          mkdir -p /tmp/filename-audit
+          python3 - <<'PY'
+          import subprocess, json, zipfile, hashlib
+          from pathlib import Path
+          from PIL import Image, ImageOps
+          paths = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          inventory = []
+          with zipfile.ZipFile('/tmp/filename-audit/source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+            for name in filter(None, paths):
+              p = Path(name)
+              data = p.read_bytes()
+              item = {'path':name, 'bytes':len(data), 'sha256':hashlib.sha256(data).hexdigest()}
+              if p.suffix.lower() in ('.jpg','.jpeg','.png','.gif','.webp','.ico'):
+                with Image.open(p) as image:
+                  item['size'] = list(image.size)
+                  small = ImageOps.exif_transpose(image).convert('L').resize((9,8))
+                  pixels = list(small.getdata())
+                  item['dhash'] = format(sum((pixels[y*9+x] > pixels[y*9+x+1]) << (y*8+x) for y in range(8) for x in range(8)), '016x')
+              if not name.startswith('media/') and p.suffix.lower() not in ('.woff','.woff2','.ttf','.eot','.otf'):
+                try:
+                  data.decode('utf-8')
+                  archive.writestr(name,data)
+                except UnicodeDecodeError:
+                  pass
+              inventory.append(item)
+          Path('/tmp/filename-audit/inventory.json').write_text(json.dumps(inventory,indent=2))
+          print('Tracked files:',len(inventory))
+          print('Media files:',sum(i['path'].startswith('media/') for i in inventory))
+          print('Source revision:',subprocess.check_output(['git','rev-parse','HEAD']).decode().strip())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filename-audit
+          path: /tmp/filename-audit
+          retention-days: 3
