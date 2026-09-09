@@ -43,6 +43,17 @@ window.addEventListener('resize', () => {
 
 const decoded = new Set<string>()
 const demands = new Map<string, { decode: boolean; image?: HTMLImageElement }>()
+// Do not immediately discard the detached preload elements for the core pages.
+// Keeping their native handles avoids losing the warmed Contacts/Home resources
+// while speculative album transfers fill an ephemeral browser's image cache.
+// This is bounded and never pins the complete albums or their zoom variants.
+const coreImages = new Map<string, HTMLImageElement>()
+function retainCoreImage(url: string, image: HTMLImageElement) {
+  if (!/\/media\/images\/(home|navigation|contacts|branding)\//.test(url)) return
+  coreImages.delete(url)
+  coreImages.set(url, image)
+  while (coreImages.size > 32) coreImages.delete(coreImages.keys().next().value!)
+}
 const canonicalResource = (value: string) => {
   const url = new URL(value, location.href)
   return url.origin === location.origin ? url.pathname + url.search : url.href
@@ -67,7 +78,10 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
       image.onload = image.onerror = null
       demand.image = undefined
       if (error) { image.removeAttribute('src'); reject(error) }
-      else resolve()
+      else {
+        if (demand.decode) retainCoreImage(url, image)
+        resolve()
+      }
     }
     // Timeout is a failure with recovery controls, never permission to hide the loader.
     const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 60000)
