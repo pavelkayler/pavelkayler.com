@@ -1,0 +1,56 @@
+name: Apply descriptive asset names
+on:
+  push:
+    branches: [refactor/descriptive-asset-names]
+    paths: [.github/workflows/apply-asset-names.yml, scripts/rename-assets-once.py]
+permissions:
+  contents: write
+jobs:
+  rename:
+    if: github.ref == 'refs/heads/refactor/descriptive-asset-names'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - run: python3 -m pip install --quiet pillow
+      - name: Rename files and verify every binary and content model
+        run: python3 scripts/rename-assets-once.py
+      - name: Commit only to the isolated review branch without rewriting history
+        run: |
+          test "$(git ls-remote origin refs/heads/refactor/descriptive-asset-names | cut -f1)" = "$GITHUB_SHA"
+          git add -A
+          git diff --cached --check
+          # The bot does not change workflows; temporary helpers are removed via review tooling.
+          test -z "$(git diff --cached --name-only -- .github/workflows)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Rename media, fonts, icons and maintained content by purpose'
+          git push origin HEAD:refs/heads/refactor/descriptive-asset-names
+          git rev-parse HEAD > /tmp/descriptive-asset-names/commit.txt
+      - name: Save reviewable source text and preservation evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/descriptive-asset-names
+          python3 - <<'PY'
+          import zipfile, subprocess
+          from pathlib import Path
+          with zipfile.ZipFile('/tmp/descriptive-asset-names/source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+            names = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+            for name in filter(None,names):
+              p = Path(name)
+              if not p.is_file() or p.suffix.lower() in ('.woff','.woff2','.ttf','.eot','.otf','.jpg','.png','.mp4','.ico'):
+                continue
+              try:
+                text = p.read_text()
+                archive.writestr(name,text)
+              except UnicodeDecodeError:
+                pass
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: descriptive-name-preservation
+          path: /tmp/descriptive-asset-names
+          retention-days: 7
