@@ -34,7 +34,7 @@ def snapshot():
         for p in (Path('dist')/old).rglob('*'):
             if p.is_file(): published[new+'/'+str(p.relative_to(Path('dist')/old))] = digest(p)
     content = {str(p): rewrite(p.read_text()) for p in Path('src/generated').rglob('*') if p.suffix in ('.ts','.json')}
-    theme = Path('dist/legacy-theme.css').read_text().replace('/* Extracted from the archived Wfolio page for React fidelity; Oswald v49 is self-hosted. */', '/* Frozen portfolio theme; Oswald v49 is self-hosted. */')
+    theme = Path('dist/legacy-theme.css').read_text().replace('/* Extracted from the archived Wfolio page for React fidelity; Oswald v49 is self-hosted. */', '/* Frozen portfolio theme; Oswald v49 is self-hosted. */').rstrip() + '\n'
     (TMP/'baseline.json').write_text(json.dumps({'media':media,'published':published,'content':content,'theme':theme}))
     print(json.dumps({'baseline_source_media':len(media),'baseline_published_media':len(published),'baseline_content':len(content)}))
 
@@ -42,8 +42,13 @@ def freeze():
     subprocess.run(['node','scripts/finalize-source-migration.mjs'], check=True)
     Path('scripts/finalize-source-migration.mjs').unlink()
     Path('.github/workflows/finalize-source-migration.yml').unlink(missing_ok=True)
-    p = Path('scripts/browser-smoke.py')
-    p.write_text(p.read_text().replace(', before)\n', ', arg=before)\n'))
+    theme = Path('assets/styles/site-theme.css')
+    theme.write_text(theme.read_text().rstrip() + '\n')
+    # Preserve valid fallbacks instead of leaving references to deleted font files.
+    # Removing a fallback requires a separate CSS change, not merely deleting its file.
+    fonts = subprocess.check_output(['git','ls-files','assets/font-awesome/*.ttf'], text=True).splitlines()
+    for filename in fonts:
+        Path(filename).write_bytes(subprocess.check_output(['git','show','HEAD:'+filename]))
     for filename in ('pages.yml','react-build.yml'):
         p = Path('.github/workflows')/filename
         text = p.read_text().replace('run: npm install', 'run: npm ci --no-audit --no-fund')
