@@ -23,25 +23,32 @@ export function currentSiteRoute() {
   return normalizeRoute(base && path.startsWith(`${base}/`) ? path.slice(base.length) : path)
 }
 
+async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: number | undefined
+  try {
+    return await Promise.race([promise, new Promise<T>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(`Resource timed out: ${label}`)), 60000)
+    })])
+  } finally { window.clearTimeout(timer) }
+}
 function codeTask(path: string, priority: number, retry: boolean) {
   const id = `code:${path}`
-  return { id, promise: resources.request(id, () => preloadRouteModule(path), priority, { retry }) }
+  return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), priority, { retry }) }
 }
 function viewerTask(priority: number, retry: boolean) {
   const id = 'code:photo-viewer'
   return { id, promise: resources.request(id, async () => {
-    await Promise.all([import('photoswipe/lightbox'), import('photoswipe')])
+    await bounded(Promise.all([import('photoswipe/lightbox'), import('photoswipe')]), id)
   }, priority, { retry }) }
 }
 function fontTask(retry: boolean) {
   const id = 'fonts:site'
   return { id, promise: resources.request(id, async () => {
-    await Promise.all([
+    await bounded(Promise.all([
       document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
       document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
       document.fonts.load('400 16px "Font Awesome 5 Brands"', '\uf2c6\uf16d\uf189\uf167'),
-    ])
-    await document.fonts.ready
+    ]).then(() => document.fonts.ready), id)
   }, 0, { retry }) }
 }
 
@@ -66,7 +73,8 @@ export function prepareStartup(path: string, retry = false): ResourceWork {
 }
 export function prepareScreen(path: string, priority = 0, retry = false): ResourceWork {
   return work([...imageWork(screenPlan(path), priority, priority <= 10, retry),
-    codeTask(path, priority, retry), viewerTask(priority, retry)])
+    codeTask(path, priority, retry),
+    ...(path === '/' || !mainPlans[path] ? [viewerTask(priority, retry)] : [])])
 }
 
 let backgroundStarted = false

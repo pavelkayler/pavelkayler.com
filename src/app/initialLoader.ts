@@ -36,9 +36,14 @@ export async function dismissInitialLoader() {
   let retry = false
   let completed = false
   let disposeProgress: () => void = () => undefined
-  const slowTimer = window.setTimeout(() => { slow = true; actions.hidden = false; continueButton.disabled = !document.querySelector('#root .react-route') }, 10000)
+  const slowTimer = window.setTimeout(() => {
+    slow = true
+    actions.hidden = false
+    continueButton.disabled = !document.querySelector('#root .react-route')
+  }, 10000)
   try {
     for (;;) {
+      const viewport = `${window.innerWidth}:${window.devicePixelRatio}`
       const pending = prepareStartup(currentSiteRoute(), retry)
       const update = () => {
         const state = resourceProgress(pending.ids)
@@ -64,7 +69,11 @@ export async function dismissInitialLoader() {
         catch { domFailed = true; update(); return false }
       })
       const result = await Promise.race([readiness, choice])
-      if (result === true) { completed = true; break }
+      if (result === true) {
+        if (viewport !== `${window.innerWidth}:${window.devicePixelRatio}`) { retry = false; continue }
+        completed = true
+        break
+      }
       const action = result === false ? await choice : result
       if (action === 'continue') break
       retry = true

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Cold-cache startup/priority/recovery checks against a real HTTP server.
-Responses use the actual dist bytes and HTTP caching; no Playwright routing mocks.
-A held response proves that elapsed time cannot dismiss the startup loader.
+Responses use actual dist bytes and HTTP caching, not Playwright routing mocks.
 """
 import argparse
 import asyncio
@@ -14,7 +13,6 @@ import threading
 import time
 from urllib.parse import urlsplit
 from playwright.async_api import async_playwright
-
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'test-results/browser/preloading'
 
@@ -32,7 +30,9 @@ class SiteServer:
         class Handler(SimpleHTTPRequestHandler):
             def log_message(self, *args): pass
             def end_headers(self):
-                if urlsplit(self.path).path.endswith(('.js','.css','.woff2','.ttf','.jpg','.png','.mp4')):
+                if getattr(self, 'injected_failure', False):
+                    self.send_header('Cache-Control', 'no-store')
+                elif urlsplit(self.path).path.endswith(('.js','.css','.woff2','.ttf','.jpg','.png','.mp4')):
                     self.send_header('Cache-Control', 'public, max-age=86400')
                 else:
                     self.send_header('Cache-Control', 'no-store')
@@ -43,6 +43,7 @@ class SiteServer:
                 if '/home-photo-08-' in path:
                     owner.home_requested.set()
                     if owner.fail_photo:
+                        self.injected_failure = True
                         self.send_error(503, 'Injected image failure'); return
                     if owner.hold_home: owner.home_release.wait(35)
                 if '/projects-photo-001-' in path and owner.hold_projects:
