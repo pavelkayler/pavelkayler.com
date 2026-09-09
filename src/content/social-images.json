@@ -1,0 +1,26 @@
+[
+  {
+    "source": "media/images/social/site-social-preview-1200x630.png",
+    "target": "assets/social/home.png"
+  },
+  {
+    "source": "media/images/social/site-social-preview-1200x630.png",
+    "target": "assets/social/works.png"
+  },
+  {
+    "source": "media/images/social/portraits-social-preview-1200x630.jpg",
+    "target": "assets/social/portraits.jpg"
+  },
+  {
+    "source": "media/images/social/projects-social-preview-1200x630.jpg",
+    "target": "assets/social/projects.jpg"
+  },
+  {
+    "source": "media/images/social/brands-social-preview-1200x630.jpg",
+    "target": "assets/social/brands.jpg"
+  },
+  {
+    "source": "media/images/social/site-social-preview-1200x630.png",
+    "target": "assets/social/contacts.png"
+  }
+]

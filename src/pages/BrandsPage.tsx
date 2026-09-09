@@ -1,4 +1,4 @@
-import { album } from '../generated/content/brands'
+import { album } from '../content/pages/brands'
 import { GalleryPage } from './GalleryPage'
 
 export function BrandsPage() {

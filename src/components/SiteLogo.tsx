@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { prefetchRoute } from '../app/prefetch'
-import { siteLogo } from '../generated/content/site'
+import { siteLogo } from '../content/site'
 import { resolveAsset } from './StructuredImage'
 
 export function SiteLogo() {

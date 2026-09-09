@@ -1,4 +1,4 @@
-import { contactsContent } from '../generated/content/contacts'
+import { contactsContent } from '../content/pages/contacts'
 import { LogoSpacer } from '../components/LogoSpacer'
 import { StructuredImage } from '../components/StructuredImage'
 import { usePageMeta } from '../hooks/usePageMeta'
