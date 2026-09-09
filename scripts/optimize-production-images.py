@@ -7,7 +7,7 @@ from tempfile import NamedTemporaryFile
 
 from PIL import Image, ImageOps
 
-ROOT = Path("dist/i.wfolio.ru")
+ROOT = Path("dist/media/images")
 MIN_BYTES = 1536 * 1024
 MAX_EDGE = 4096
 JPEG_QUALITY = 91

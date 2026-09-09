@@ -45,7 +45,6 @@ const oswaldV49Files = [
   'TK3_WkUHHAIjg75cFRf3bXL8LICs1xZosUZiZQ.woff2',
 ]
 
-const oswaldRemoteBase = 'https://fonts.gstatic.com/s/oswald/v49/'
 const oswaldLocalBase = 'assets/fonts/oswald/'
 
 async function copyVendoredOswald() {
@@ -63,44 +62,13 @@ async function copyVendoredOswald() {
   console.log(`Copied vendored Oswald v49: ${oswaldV49Files.length} WOFF2 files, ${(bytes / 1024).toFixed(1)} KiB.`)
 }
 
-// Wfolio's core Polina layout/theme rules were emitted as inline <style> blocks,
-// while the linked vendor stylesheet mostly contains shared/vendor assets such as icons.
-// Preserve the inline rules in a root-level CSS file, but replace the archived Google
-// Fonts URLs with local vendored files from the exact same Oswald v49 release. Keeping
-// the CSS at the publish root also preserves its original relative url(assets/...) semantics.
-const legacyHome = await readFile(path.join(ROOT, 'legacy-source', 'index.html'), 'utf8')
-let inlineStyles = [...legacyHome.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gi)]
-  .map((match) => match[1])
-  .join('\n\n')
-
-if (!inlineStyles.trim()) {
-  throw new Error('Could not extract legacy Wfolio inline theme CSS')
-}
-
-for (const filename of oswaldV49Files) {
-  const remoteUrl = `${oswaldRemoteBase}${filename}`
-  if (!inlineStyles.includes(remoteUrl)) {
-    throw new Error(`Archived Oswald v49 source is missing from legacy CSS: ${filename}`)
-  }
-  inlineStyles = inlineStyles.replaceAll(remoteUrl, `${oswaldLocalBase}${filename}`)
-}
-
-if (/fonts\.(?:gstatic|googleapis)\.com/i.test(inlineStyles)) {
-  throw new Error('External Google Fonts reference remains in generated legacy CSS')
-}
-
-await writeFile(
-  path.join(DIST, 'legacy-theme.css'),
-  `/* Extracted from the archived Wfolio page for React fidelity; Oswald v49 is self-hosted. */\n${inlineStyles}\n`,
-)
+await copyAssetTo('assets/styles/site-theme.css', 'site-theme.css')
 await copyVendoredOswald()
 
-// Ship only the legacy assets that the React shell and retained CSS can still use.
-// The archived Wfolio runtime JS, builder resources, locale flags, and unrelated assets
-// deliberately stay out of dist. Modern browsers use the WOFF2 Font Awesome sources,
-// so the legacy TTF fallbacks are intentionally not published.
+// Ship only runtime assets used by the React shell and retained theme CSS.
+// Builder resources and unrelated fallbacks stay out of dist.
 const runtimeAssets = [
-  'assets/mobile-overrides.css',
+  'assets/styles/responsive.css',
   'assets/folio/desktop/vendor/polina-3994a6f8acd9e18fe38b14dbbad877484965df0633ca7776ab996d2430e39a9f.css',
   'assets/custom-icons-cb5906d824b59115b50c97eba5c0ee88aa5a4acb1a3af5a672f988e36a617629.woff2',
   'assets/font-awesome/fa-brands-400-42c6ccd2717a8509dd84c26181c64985ac29600b9d04d9b5a34b488fbf3075e1.woff2',
