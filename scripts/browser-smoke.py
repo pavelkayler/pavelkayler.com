@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright
+from home_gallery_checks import check_home_gallery
 
 SCROLLER = """() => [...document.querySelectorAll('*')].find(el =>
   el.clientWidth > innerWidth * .7 && el.clientHeight > innerHeight * .5 &&
@@ -63,6 +64,10 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             assert logo and logo['width'] > 150, f'Home logo should remain large: {logo}'
         await screenshot('home')
         checks.append('home hero and inactive current menu')
+
+        stage = 'homepage photographs'
+        checks.extend(await check_home_gallery(page, browser, base, screenshot,
+            swipe_next, width, height, mobile, SCROLLER))
 
         stage = 'works and scrolling'
         await page.locator('.menu-list a', has_text='WORKS').click()
