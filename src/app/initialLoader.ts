@@ -36,7 +36,7 @@ export async function dismissInitialLoader() {
   let retry = false
   let completed = false
   let disposeProgress: () => void = () => undefined
-  const slowTimer = window.setTimeout(() => { slow = true; actions.hidden = false }, 10000)
+  const slowTimer = window.setTimeout(() => { slow = true; actions.hidden = false; continueButton.disabled = !document.querySelector('#root .react-route') }, 10000)
   try {
     for (;;) {
       const pending = prepareStartup(currentSiteRoute(), retry)

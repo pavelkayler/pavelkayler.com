@@ -24,7 +24,10 @@ const pending = new Map<LazyPageKey, Promise<LazyRouteModule>>()
 function load(key: LazyPageKey) {
   let promise = pending.get(key)
   if (!promise) {
-    promise = loaders[key]()
+    promise = loaders[key]().catch((error: unknown) => {
+      pending.delete(key)
+      throw error
+    })
     pending.set(key, promise)
   }
   return promise

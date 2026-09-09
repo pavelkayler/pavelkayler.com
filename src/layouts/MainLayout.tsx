@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
+import { NavigationProgress } from '../components/NavigationProgress'
 import { SiteLogo } from '../components/SiteLogo'
 import { pages, type PageKey } from '../content/page-metadata'
 import { scheduleRouteWarmup } from '../app/prefetch'
@@ -40,6 +41,7 @@ export function MainLayout() {
       <div className="persistent-site-logo">
         <SiteLogo />
       </div>
+      <NavigationProgress />
       <Outlet />
       <Footer />
       <ScrollRestoration />

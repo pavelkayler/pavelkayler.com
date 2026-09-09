@@ -59,6 +59,12 @@
         transition: opacity 360ms ease, visibility 360ms ease;
       }
 
+      .site-loader-content { display: grid; justify-items: center; gap: 18px; padding: 24px; text-align: center; color: #eee; font: 14px/1.5 Arial, sans-serif; }
+      #site-loader-progress { width: 180px; height: 3px; accent-color: #ddd; }
+      #site-loader-actions[hidden], #site-loader-retry[hidden] { display: none; }
+      #site-loader-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 400px; }
+      #site-loader-actions button { color: #eee; background: #292929; border: 1px solid #666; padding: 10px 14px; border-radius: 4px; cursor: pointer; }
+      #site-loader-actions button:disabled { opacity: .5; cursor: wait; }
       #site-loader.is-hidden {
         opacity: 0;
         visibility: hidden;
@@ -93,7 +99,15 @@
   </head>
   <body class="theme-polina -has-cover -color-scheme -scheme-dark -accented uc-page-type-page">
     <div id="site-loader" role="status" aria-live="polite" aria-label="Загрузка сайта">
-      <span class="site-loader-spinner" aria-hidden="true"></span>
+      <div class="site-loader-content">
+        <span class="site-loader-spinner" aria-hidden="true"></span>
+        <span id="site-loader-label">Подготовка сайта</span>
+        <progress id="site-loader-progress" max="1" value="0" aria-label="Готовность сайта"></progress>
+        <div id="site-loader-actions" hidden>
+          <button id="site-loader-retry" type="button" hidden>Повторить загрузку</button>
+          <button id="site-loader-continue" type="button">Открыть доступную часть сайта</button>
+        </div>
+      </div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

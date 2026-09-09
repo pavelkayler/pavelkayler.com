@@ -24,8 +24,9 @@ export const mainPlans: Record<string, ImageSpec[]> = {
 export const albums = { '/portraits': portraits, '/projects': projects, '/brands': brands }
 export const allRoutes = [...Object.keys(mainPlans), ...Object.keys(albums)]
 export const normalizeRoute = (path: string) => path.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/'
-export const routeName = (path: string) => ({ '/': 'Home', '/works': 'Works', '/contacts': 'Contacts',
-  '/portraits': 'Portraits', '/projects': 'Projects', '/brands': 'Brands' }[path] || 'страницы')
+const routeNames: Record<string, string> = { '/': 'Home', '/works': 'Works', '/contacts': 'Contacts',
+  '/portraits': 'Portraits', '/projects': 'Projects', '/brands': 'Brands' }
+export const routeName = (path: string) => routeNames[path] || 'страницы'
 export const logoSpec: ImageSpec = { src: siteLogo.src }
 
 export function albumPlan(path: string): ImageSpec[] {

@@ -143,6 +143,9 @@ async def _check_home_gallery(page, browser, base, screenshot, swipe_next,
     p.set_default_timeout(30000)
     try:
         await p.goto(base+'/', wait_until='domcontentloaded')
+        await asyncio.wait_for(requested.wait(), timeout=10)
+        # Bypass the held startup viewer explicitly to test leave-mid-import recovery.
+        await p.locator('#site-loader-continue').click(timeout=20000)
         link = p.locator('#home-main a.home-gallery-link').first
         if mobile:
             await link.tap()

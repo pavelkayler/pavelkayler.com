@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import { requestImage } from '../app/imageResources'
 import Masonry from 'masonry-layout'
 import type { GalleryPhoto } from '../content/types'
 import { resolveAsset, StructuredImage } from './StructuredImage'
@@ -68,13 +69,14 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     // initialize its small lightbox controller immediately. The previous viewport
     // observer could miss an absolutely-positioned Masonry container and leave every
     // photo as a plain link with no PhotoSwipe handler attached.
-    void ensureLightbox()
+    void ensureLightbox().catch(() => undefined)
 
     // Also cover the short interval while the dynamic module is downloading. If the
     // first tap arrives before init() completes, keep the browser on the gallery and
     // open that exact photograph as soon as PhotoSwipe is ready.
     const handleEarlyClick = (event: MouseEvent) => {
-      if (lightbox || cancelled) return
+      if (cancelled || event.defaultPrevented || event.button !== 0 ||
+          event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
 
       const target = event.target
       if (!(target instanceof Element)) return
@@ -82,6 +84,8 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
       const anchor = target.closest('a.js-gallery-link')
       if (!(anchor instanceof HTMLAnchorElement) || !gallery.contains(anchor)) return
 
+      void requestImage(anchor.href, 0).catch(() => undefined)
+      if (lightbox) return
       event.preventDefault()
       event.stopPropagation()
 
@@ -91,7 +95,7 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
 
       void ensureLightbox().then((instance) => {
         if (!cancelled) instance?.loadAndOpen(index)
-      })
+      }).catch(() => { if (!cancelled && anchor.isConnected) window.location.assign(anchor.href) })
     }
 
     gallery.addEventListener('click', handleEarlyClick, true)
