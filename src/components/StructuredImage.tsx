@@ -1,13 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react'
 import type { StructuredImage as StructuredImageData } from '../content/types'
-
-export function resolveAsset(value: string) {
-  return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
-}
-
-function resolveSrcSet(value: string) {
-  return value.replaceAll('__BASE__', import.meta.env.BASE_URL)
-}
+import { imageIsDownloaded, imageIsPrepared, imageUrl, resources,
+  subscribeViewport, viewportSnapshot } from '../app/imageResources'
+export { resolveAsset } from '../app/imageResources'
 
 interface Props {
   image: StructuredImageData
@@ -15,54 +10,39 @@ interface Props {
   loading?: 'eager' | 'lazy'
   fetchPriority?: 'high' | 'low' | 'auto'
 }
-
 export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority = 'auto' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  useSyncExternalStore(subscribeViewport, viewportSnapshot)
+  useSyncExternalStore(resources.subscribe, resources.getRevision)
+  const src = imageUrl({ ...image, sizes })
+  const prepared = imageIsPrepared(src)
 
   const reveal = () => {
     const node = imageRef.current
     const container = containerRef.current
     if (!node || !container) return
-    const done = () => container.classList.add('is-loaded')
-    if (typeof node.decode === 'function') node.decode().catch(() => undefined).finally(done)
-    else done()
+    const expected = node.src
+    void node.decode().then(() => {
+      if (imageRef.current === node && node.src === expected) container.classList.add('is-loaded')
+    }).catch(() => undefined)
   }
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = imageRef.current
     if (node?.complete && node.naturalWidth > 0) reveal()
-  }, [])
+    else if (node?.complete && prepared) node.src = src
+  }, [src, prepared])
 
   return (
-    <div
-      ref={containerRef}
-      className="lazy-image js-lazy-image"
-      data-role="lazy-image"
-      data-width={image.width}
-      data-height={image.height}
-      data-aspect={image.aspect}
-    >
-      <canvas
-        className="placeholder"
-        width={image.placeholderWidth}
-        height={image.placeholderHeight}
-        style={{ backgroundColor: image.placeholderColor }}
-      />
-      <img
-        ref={imageRef}
-        alt={image.alt}
-        src={resolveAsset(image.src)}
-        srcSet={image.srcSet ? resolveSrcSet(image.srcSet) : undefined}
-        sizes={sizes}
-        width={image.width}
-        height={image.height}
-        loading={loading}
-        decoding="async"
-        fetchPriority={fetchPriority}
-        onLoad={reveal}
-        onError={() => containerRef.current?.classList.add('is-loaded')}
-      />
+    <div ref={containerRef} className={`lazy-image js-lazy-image${prepared ? ' is-loaded is-prepared' : ''}`}
+      data-role="lazy-image" data-width={image.width} data-height={image.height} data-aspect={image.aspect}>
+      <canvas className="placeholder" width={image.placeholderWidth} height={image.placeholderHeight}
+        style={{ backgroundColor: image.placeholderColor }} />
+      <img ref={imageRef} alt={image.alt} src={src} sizes={sizes}
+        width={image.width} height={image.height}
+        loading={prepared || imageIsDownloaded(src) ? 'eager' : loading}
+        decoding="async" fetchPriority={fetchPriority} onLoad={reveal}
+        onError={() => containerRef.current?.classList.add('is-loaded')} />
     </div>
   )
 }
