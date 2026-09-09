@@ -1,32 +1,66 @@
 import { Link } from 'react-router-dom'
 import { homeContent } from '../generated/content/home'
+import type { StructuredImage as ImageData } from '../content/types'
 import { prefetchRoute } from '../app/prefetch'
 import { HomeSlider } from '../components/HomeSlider'
-import { StructuredImage } from '../components/StructuredImage'
+import { resolveAsset, StructuredImage } from '../components/StructuredImage'
+import { useHomePhotoGallery } from '../hooks/useHomePhotoGallery'
 import { usePageMeta } from '../hooks/usePageMeta'
+
+function fullscreenImage(image: ImageData) {
+  // Use the largest already-published variant, not the 1280px thumbnail default.
+  // The frozen homepage srcsets use width descriptors and one aspect ratio.
+  const candidates = image.srcSet.split(',').flatMap((candidate) => {
+    const match = candidate.trim().match(/^(\S+)\s+([1-9]\d*)w$/)
+    return match ? [{ src: match[1], width: Number(match[2]) }] : []
+  })
+  const largest = candidates.sort((a, b) => b.width - a.width)[0]
+  const width = largest?.width ?? image.width
+  return {
+    src: resolveAsset(largest?.src ?? image.src),
+    width,
+    height: Math.round(image.height * width / image.width),
+    srcSet: image.srcSet ? resolveAsset(image.srcSet) : undefined,
+  }
+}
 
 export function HomePage() {
   usePageMeta('home')
+  const galleryRef = useHomePhotoGallery()
 
   return (
     <div className="react-route native-react-page">
       <HomeSlider cover={homeContent.cover} />
 
-      <main className="page-main sections-page js-main" id="home-main">
+      <main ref={galleryRef} className="page-main sections-page js-main" id="home-main">
         {homeContent.pictureRows.map((row, rowIndex) => (
           <div className={`${row.containerClass} -visible`} key={`${row.containerClass}-${rowIndex}`}>
             <div className="sections-container-inner">
               <div className="row">
-                {row.columns.map((column, columnIndex) => (
-                  <div className={column.columnClass} key={`${rowIndex}-${columnIndex}`}>
-                    <section className={column.sectionClass}>
-                      <StructuredImage
-                        image={column.image}
-                        sizes={row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw'}
-                      />
-                    </section>
-                  </div>
-                ))}
+                {row.columns.map((column, columnIndex) => {
+                  const fullscreen = fullscreenImage(column.image)
+                  return (
+                    <div className={column.columnClass} key={`${rowIndex}-${columnIndex}`}>
+                      <section className={column.sectionClass}>
+                        <a
+                          className="home-gallery-link"
+                          href={fullscreen.src}
+                          data-pswp-width={fullscreen.width}
+                          data-pswp-height={fullscreen.height}
+                          data-pswp-srcset={fullscreen.srcSet}
+                          aria-haspopup="dialog"
+                          aria-label="Открыть фотографию"
+                          style={{ display: 'block', width: '100%', cursor: 'zoom-in' }}
+                        >
+                          <StructuredImage
+                            image={column.image}
+                            sizes={row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw'}
+                          />
+                        </a>
+                      </section>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
