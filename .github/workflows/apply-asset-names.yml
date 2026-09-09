@@ -17,11 +17,26 @@ jobs:
       - run: python3 -m pip install --quiet pillow
       - name: Rename files and verify every binary and content model
         run: python3 scripts/rename-assets-once.py
+      - name: Preserve license formatting and include stylesheet font fallbacks
+        run: |
+          git restore --source=HEAD --worktree -- assets/fonts/oswald/OFL.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          catalog = Path('media/catalog.csv')
+          catalog.write_text(catalog.read_text())
+          script = Path('scripts/copy-react-assets.mjs')
+          content = script.read_text()
+          marker = 'const runtimeAssets = [\n'
+          assert content.count(marker) == 1
+          fallbacks = ''.join(f"  'assets/fonts/font-awesome/fontawesome-{style}.ttf',\n" for style in ('brands-400','light-300','solid-900'))
+          script.write_text(content.replace(marker, marker + fallbacks))
+          PY
       - name: Commit only to the isolated review branch without rewriting history
         run: |
           test "$(git ls-remote origin refs/heads/refactor/descriptive-asset-names | cut -f1)" = "$GITHUB_SHA"
           git add -A
           git diff --cached --check
+          python3 scripts/validate-file-names.py
           # The bot does not change workflows; temporary helpers are removed via review tooling.
           test -z "$(git diff --cached --name-only -- .github/workflows)"
           git config user.name 'github-actions[bot]'
