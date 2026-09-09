@@ -9,7 +9,7 @@ permissions:
   actions: read
 concurrency:
   group: standalone-preparation
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -35,80 +35,10 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
       - name: Record immutable media and content baseline
-        run: |
-          mkdir -p "$RUNNER_TEMP/standalone-review/workflows"
-          python3 - <<'PY'
-          import hashlib, json, os, re
-          from pathlib import Path
-          root = Path.cwd()
-          mapping = {'i.wfolio.ru': 'media/images', 'static.wfolio.ru': 'media/static', 'vp.wfolio.ru': 'media/video'}
-          def rewrite(text):
-              for old, new in mapping.items(): text = text.replace(old+'/', new+'/')
-              return text.replace('// AUTO-GENERATED. Do not edit directly.', '// FROZEN SOURCE. Update intentionally when site content changes.').replace('// AUTO-GENERATED.', '// FROZEN SOURCE. Update intentionally when site content changes.')
-          def hash_file(p):
-              h = hashlib.sha256()
-              with p.open('rb') as f:
-                  for block in iter(lambda: f.read(1024*1024), b''): h.update(block)
-              return h.hexdigest()
-          media = {}
-          for old, new in mapping.items():
-              assert (root / old).is_dir(), old
-              for file in (root / old).rglob('*'):
-                  if file.is_file(): media[new+'/'+str(file.relative_to(root/old))] = hash_file(file)
-          content = {str(p): rewrite(p.read_text()) for p in Path('src/generated').rglob('*') if p.suffix in ('.ts','.json')}
-          theme = Path('dist/legacy-theme.css').read_text().replace('/* Extracted from the archived Wfolio page for React fidelity; Oswald v49 is self-hosted. */','/* Frozen portfolio theme; Oswald v49 is self-hosted. */')
-          published = {}
-          for old,new in mapping.items():
-              for p in (Path('dist')/old).rglob('*'):
-                  if p.is_file(): published[new+'/'+str(p.relative_to(Path('dist')/old))] = hash_file(p)
-          data = {'media': media, 'content': content, 'theme': theme, 'published': published}
-          (Path(os.environ['RUNNER_TEMP'])/'baseline.json').write_text(json.dumps(data))
-          print(f'Baseline: {len(media)} source media files; {len(published)} published media files; {len(content)} content files')
-          PY
+        run: python3 scripts/prepare-standalone.py snapshot
       - name: Freeze source and prepare final workflows
         run: |
-          node scripts/finalize-source-migration.mjs
-          rm -f scripts/finalize-source-migration.mjs .github/workflows/finalize-source-migration.yml
-          python3 - <<'PY'
-          import os, pathlib
-          p = pathlib.Path('scripts/browser-smoke.py')
-          p.write_text(p.read_text().replace(", before)\n", ", arg=before)\n"))
-          for filename in ['pages.yml','react-build.yml']:
-              p = pathlib.Path('.github/workflows') / filename
-              text = p.read_text().replace('run: npm install', 'run: npm ci --no-audit --no-fund')
-              if filename == 'pages.yml':
-                  anchor = '      - name: Install media tools'
-                  marker = '''      - name: Identify published revision
-                  run: |
-                    python3 - <<'PYINFO'
-                    import json, os
-                    from pathlib import Path
-                    Path('dist/build-info.json').write_text(json.dumps({'commit': os.environ['GITHUB_SHA']}))
-                    PYINFO
-
-          '''
-                  # Normalize the embedded YAML indentation independently of this Python block.
-                  marker = '\n'.join(line[8:] if line.startswith('        ') else line for line in marker.splitlines()) + '\n'
-                  marker = '      - name: Identify published revision\n        run: |\n          python3 -c "import json,os,pathlib; pathlib.Path(\'dist/build-info.json\').write_text(json.dumps({\'commit\':os.environ[\'GITHUB_SHA\']}))"\n\n'
-                  assert anchor in text
-                  text = text.replace(anchor, marker + anchor)
-                  assert '\n  smoke:\n' in text
-                  text = text.split('\n  smoke:\n')[0] + '''
-            smoke:
-              needs: deploy
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              permissions:
-                contents: read
-              steps:
-                - uses: actions/checkout@v6
-                - name: Require HTTPS, redirects and the published revision
-                  env:
-                    EXPECTED_COMMIT: ${{ github.sha }}
-                  run: bash scripts/check-live-site.sh
-          '''
-              p.write_text(text)
-          PY
+          python3 scripts/prepare-standalone.py freeze
           bash -n scripts/check-live-site.sh
           python3 -m py_compile scripts/browser-smoke.py
       - name: Build without the migration archive and verify preservation
@@ -116,35 +46,25 @@ jobs:
           VITE_BASE_PATH: /
         run: |
           npm run build
-          python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          baseline = json.loads((Path(os.environ['RUNNER_TEMP'])/'baseline.json').read_text())
-          def hash_file(p):
-              h = hashlib.sha256()
-              with p.open('rb') as f:
-                  for block in iter(lambda: f.read(1024*1024), b''): h.update(block)
-              return h.hexdigest()
-          for name, expected in baseline['media'].items():
-              assert Path(name).is_file(), f'Missing source media: {name}'
-              assert hash_file(Path(name)) == expected, f'Media bytes changed: {name}'
-          actual = {str(p) for p in Path('media').rglob('*') if p.is_file()}
-          assert actual == set(baseline['media']), 'Media file set changed'
-          for name, expected in baseline['content'].items():
-              assert Path(name).read_text() == expected, f'Content changed beyond path rewriting: {name}'
-          assert Path('dist/site-theme.css').read_text() == baseline['theme'], 'Theme rules changed'
-          for name, expected in baseline['published'].items():
-              assert hash_file(Path('dist')/name) == expected, f'Published media changed: {name}'
-          for name in ['legacy-source','i.wfolio.ru','static.wfolio.ru','vp.wfolio.ru','wfolio','mc.yandex.ru','migration-report.json','works.html','portraits.html','projects.html','brands.html','contacts.html']:
-              assert not Path(name).exists(), f'Migration artifact remains: {name}'
-          report = {'source_media_unchanged': len(baseline['media']), 'published_media_unchanged': len(baseline['published']), 'content_files_preserved': len(baseline['content']), 'theme_preserved': True, 'independent_build': True}
-          (Path(os.environ['RUNNER_TEMP'])/'standalone-review'/'preservation.json').write_text(json.dumps(report, indent=2))
-          print(json.dumps(report))
-          PY
-      - name: Verify current live HTTPS independently of the cleanup
-        env:
-          SMOKE_ATTEMPTS: 2
-        run: bash scripts/check-live-site.sh
+          python3 scripts/prepare-standalone.py verify
+      - name: Publish source only to the isolated maintenance branch
+        run: |
+          # Workflow definitions are reviewed and committed separately through the
+          # repository integration; the runner cannot grant itself workflow access.
+          git restore --source=HEAD --staged --worktree .github
+          rm scripts/prepare-standalone.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --stat | tail -n 1
+          git diff --cached --check > "$RUNNER_TEMP/whitespace-check.txt" 2>&1 || { tail -n 30 "$RUNNER_TEMP/whitespace-check.txt"; exit 1; }
+          if git diff --cached --name-only | grep -E '^(node_modules/|dist/|test-results/)|(^|/)__pycache__/'; then
+            echo 'Build products must not enter source control'
+            exit 1
+          fi
+          git commit -m 'Freeze standalone content and relocate unchanged media' --quiet
+          git push origin HEAD:maintenance/standalone-source-2026-09-09
+          git rev-parse HEAD | tee "$RUNNER_TEMP/standalone-review/source-commit.txt"
       - name: Install browser test tools
         run: |
           python3 -m pip install --quiet playwright==1.57.0
@@ -158,23 +78,11 @@ jobs:
           trap 'kill "$SERVER_PID" || true' EXIT
           sleep 1
           python3 scripts/browser-smoke.py
-      - name: Save workflow changes for separately authorized publication
-        run: |
-          cp .github/workflows/pages.yml "$RUNNER_TEMP/standalone-review/workflows/"
-          cp .github/workflows/react-build.yml "$RUNNER_TEMP/standalone-review/workflows/"
-          # Do not make the runner token update workflow definitions. The authorized
-          # repository integration applies these separately after reviewing the result.
-          git restore --source=HEAD --staged --worktree .github
-      - name: Publish verified source only to the isolated maintenance branch
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --stat | tail -n 1
-          git diff --cached --check > "$RUNNER_TEMP/whitespace-check.txt" 2>&1 || { tail -n 30 "$RUNNER_TEMP/whitespace-check.txt"; exit 1; }
-          git commit -m 'Freeze standalone content and relocate unchanged media' --quiet
-          git push origin HEAD:maintenance/standalone-source-2026-09-09
-          git rev-parse HEAD | tee "$RUNNER_TEMP/standalone-review/source-commit.txt"
+      - name: Verify live HTTPS independently of source changes
+        if: ${{ !cancelled() }}
+        env:
+          SMOKE_ATTEMPTS: 2
+        run: bash scripts/check-live-site.sh
       - name: Upload review evidence
         if: always()
         uses: actions/upload-artifact@v4
