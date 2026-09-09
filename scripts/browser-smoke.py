@@ -23,6 +23,7 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
     page.set_default_timeout(20000)
     page.set_default_navigation_timeout(60000)
     failures, checks = [], []
+    stage = 'home'
     page.on('pageerror', lambda error: failures.append('JavaScript: '+str(error)))
     def response_check(response):
         if response.status >= 400 and response.request.resource_type in ('image','stylesheet','script','font'):
@@ -40,11 +41,14 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await page.wait_for_function("document.querySelector('.logo-image')?.naturalWidth > 0")
 
     async def swipe_next():
-        # Pointer dragging exercises the gallery gesture handler in both Chromium
-        # and WebKit; no hidden mobile arrow is forced into view for the test.
+        # A timed pointer drag lets the animation-frame gesture engine observe
+        # the movement in Chromium and WebKit, rather than all events in one frame.
         await page.mouse.move(width*.8, height*.55)
         await page.mouse.down()
-        await page.mouse.move(width*.2, height*.55, steps=12)
+        await page.wait_for_timeout(40)
+        for step in range(1, 13):
+            await page.mouse.move(width*(.8-.6*step/12), height*.55)
+            await page.wait_for_timeout(20)
         await page.mouse.up()
 
     try:
@@ -60,6 +64,7 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await screenshot('home')
         checks.append('home hero and inactive current menu')
 
+        stage = 'works and scrolling'
         await page.locator('.menu-list a', has_text='WORKS').click()
         await page.wait_for_url('**/works')
         await settled()
@@ -78,6 +83,7 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             await screenshot('works-scrolled')
         checks.append('works navigation, inactive menu and fixed inner logo')
 
+        stage = 'contacts and history'
         await page.locator('.menu-list a', has_text='CONTACTS').click()
         await page.wait_for_url('**/contacts')
         await settled()
@@ -90,26 +96,32 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         checks.append('contacts, back navigation and direct route reload')
 
         for route in ('portraits','projects','brands'):
+            stage = route + ': first click'
             await page.goto(base+'/'+route+'/')
             link = page.locator('a.js-gallery-link').first
             await link.wait_for(state='visible')
             await link.click()
             await page.locator('.pswp--open').wait_for(state='visible')
+            stage = route + ': opening and image readiness'
+            await page.wait_for_function('window.pswp?.opener?.isOpen === true')
             await page.wait_for_function("[...document.querySelectorAll('.pswp__img')].some(img => img.naturalWidth > 0)")
-            counter = page.locator('.pswp__counter')
-            before = await counter.text_content()
+            before = await page.evaluate('window.pswp.currIndex')
+            assert await page.evaluate('window.pswp.getNumItems()') > 1, 'Gallery needs multiple slides for next test'
+            stage = route + ': next slide'
             if mobile:
                 await swipe_next()
             else:
                 await page.locator('.pswp__button--arrow--next').click()
-            await page.wait_for_function("old => document.querySelector('.pswp__counter')?.textContent !== old", arg=before)
+            await page.wait_for_function('old => window.pswp?.currIndex !== old', arg=before)
             await screenshot(route+'-lightbox')
+            stage = route + ': close'
             await page.locator('.pswp__button--close').click()
             await page.locator('.pswp--open').wait_for(state='hidden')
             assert urlparse(page.url).path.rstrip('/') == '/'+route
             await screenshot(route)
             checks.append(route+': first click, next image gesture/control, close, return to gallery')
 
+        stage = 'delayed first click'
         early = await browser.new_context(viewport={"width":width,"height":height}, is_mobile=mobile, has_touch=mobile)
         async def delay_lightbox(route):
             if 'lightbox' in route.request.url.lower() and route.request.resource_type == 'script':
@@ -127,11 +139,13 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         assert not failures, '\n'.join(failures)
         return {'name':name,'passed':True,'checks':checks,'errors':[]}
     except Exception as error:
+        state = {}
         try:
             await screenshot('failure')
+            state = await page.evaluate("({url:location.href,index:window.pswp?.currIndex,items:window.pswp?.getNumItems(),opening:window.pswp?.opener?.isOpening,open:window.pswp?.opener?.isOpen,images:[...document.querySelectorAll('.pswp__img')].map(i=>({src:i.currentSrc,width:i.naturalWidth}))})")
         except Exception:
             pass
-        return {'name':name,'passed':False,'checks':checks,'errors':failures+[str(error)]}
+        return {'name':name,'passed':False,'stage':stage,'checks':checks,'errors':failures+[str(error)],'state':state}
     finally:
         await context.close()
 
