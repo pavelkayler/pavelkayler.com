@@ -93,7 +93,9 @@ async def assert_neutral_loader(page, selector, screenshot):
     assert abs(geometry['groupY']-geometry['vh']/2) < 2, geometry
     assert geometry['percentY'] > geometry['spinBottom']+8, geometry
     assert geometry['background'] == 'rgb(30, 30, 30)' and geometry['coversHeader'], geometry
-    await page.screenshot(path=str(OUTPUT/screenshot))
+    # Freeze CSS animation for this screenshot only. Runtime assertions above and
+    # navigation below still exercise the real animated, pending-resource screen.
+    await page.screenshot(path=str(OUTPUT/screenshot), animations='disabled')
 
 async def run_cold(browser, name, mobile, dpr):
     site = SiteServer()
@@ -116,7 +118,7 @@ async def run_cold(browser, name, mobile, dpr):
         images = await page.locator('#root img').evaluate_all('(imgs) => imgs.map(i => ({src:i.currentSrc,complete:i.complete,width:i.naturalWidth}))')
         assert images and all(i['complete'] and i['width']>0 for i in images), images
         assert await page.locator('#home-main .picture-section').count() == 8
-        await page.screenshot(path=str(OUTPUT/f'{name}-ready-home.png'))
+        await page.screenshot(path=str(OUTPUT/f'{name}-ready-home.png'), animations='disabled')
         initial_tasks=await page.evaluate('window.__portfolioLoading.tasks')
         core_paths={urlsplit(t['id'].split(':',1)[1]).path for t in initial_tasks if t['id'].startswith('image:') and t['priority']==0}
         await page.evaluate('''() => {
@@ -176,7 +178,7 @@ async def run_cold(browser, name, mobile, dpr):
         result['passed']=True
     except Exception as error:
         result['errors']=errors+[str(error)]
-        try: await page.screenshot(path=str(OUTPUT/f'{name}-failure.png'))
+        try: await page.screenshot(path=str(OUTPUT/f'{name}-failure.png'), animations='disabled')
         except Exception: pass
     finally:
         site.home_release.set(); site.project_release.set()
@@ -205,7 +207,7 @@ async def run_recovery(browser, bypass=False):
         result['passed']=True
     except Exception as error:
         result['error']=str(error)
-        try: await page.screenshot(path=str(OUTPUT/f'{result["name"]}-failure.png'))
+        try: await page.screenshot(path=str(OUTPUT/f'{result["name"]}-failure.png'), animations='disabled')
         except Exception: pass
     finally:
         await context.close(); site.close()
@@ -238,7 +240,7 @@ async def run_destination_recovery(browser, bypass=False):
         result['passed'] = True
     except Exception as error:
         result['error'] = str(error)
-        try: await page.screenshot(path=str(OUTPUT/f'{result["name"]}-failure.png'))
+        try: await page.screenshot(path=str(OUTPUT/f'{result["name"]}-failure.png'), animations='disabled')
         except Exception: pass
     finally:
         await context.close(); site.close()
