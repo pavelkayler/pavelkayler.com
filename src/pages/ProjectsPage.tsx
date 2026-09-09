@@ -1,4 +1,4 @@
-import { album } from '../generated/content/projects'
+import { album } from '../content/pages/projects'
 import { GalleryPage } from './GalleryPage'
 
 export function ProjectsPage() {

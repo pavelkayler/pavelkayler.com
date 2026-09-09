@@ -1,5 +1,5 @@
-import type { PageKey } from '../generated/pages'
-import { routePrefetch, type PrefetchImageSpec } from '../generated/content/prefetch'
+import type { PageKey } from '../content/page-metadata'
+import { routePrefetch, type PrefetchImageSpec } from '../content/prefetch'
 import { preloadRouteModule } from './routeModules'
 
 const routeToKey: Record<string, PageKey> = {

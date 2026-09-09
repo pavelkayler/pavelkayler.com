@@ -11,4 +11,4 @@ playwright-report/
 !.env.example
 .DS_Store
 npm-debug.log*
-# Frozen src/generated content and package-lock.json are intentional source files.
+# Frozen src/content content and package-lock.json are intentional source files.

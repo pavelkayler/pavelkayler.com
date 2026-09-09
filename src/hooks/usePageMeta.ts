@@ -1,6 +1,6 @@
 import { useLayoutEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { pages, type PageKey } from '../generated/pages'
+import { pages, type PageKey } from '../content/page-metadata'
 
 export function usePageMeta(pageKey: PageKey) {
   const page = pages[pageKey]

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { worksContent } from '../generated/content/works'
+import { worksContent } from '../content/pages/works'
 import { prefetchRoute } from '../app/prefetch'
 import { LogoSpacer } from '../components/LogoSpacer'
 import { StructuredImage } from '../components/StructuredImage'

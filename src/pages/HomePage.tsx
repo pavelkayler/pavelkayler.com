@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { homeContent } from '../generated/content/home'
+import { homeContent } from '../content/pages/home'
 import type { StructuredImage as ImageData } from '../content/types'
 import { prefetchRoute } from '../app/prefetch'
 import { HomeSlider } from '../components/HomeSlider'

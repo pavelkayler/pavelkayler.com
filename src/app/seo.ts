@@ -1,4 +1,4 @@
-import type { GeneratedPage } from '../generated/pages'
+import type { PageMetadata } from '../content/page-metadata'
 
 const SITE_ORIGIN = 'https://pavelkayler.com'
 const SITE_NAME = 'Pavel Kayler | Photographer'
@@ -6,12 +6,12 @@ const ROBOTS = 'follow, index, max-snippet:-1, max-video-preview:-1, max-image-p
 const NOT_FOUND_TITLE = 'Страница не найдена | PAVEL KAYLER'
 const NOT_FOUND_DESCRIPTION = 'Запрошенная страница не найдена.'
 
-function canonicalUrl(page: GeneratedPage) {
+function canonicalUrl(page: PageMetadata) {
   if (page.path === '/') return `${SITE_ORIGIN}/`
   return `${SITE_ORIGIN}${page.path.replace(/\/+$/, '')}/`
 }
 
-function socialImageUrl(page: GeneratedPage) {
+function socialImageUrl(page: PageMetadata) {
   if (!page.socialImage) return ''
   return `${SITE_ORIGIN}${page.socialImage.startsWith('/') ? page.socialImage : `/${page.socialImage}`}`
 }
@@ -48,7 +48,7 @@ function removeStructuredData() {
   document.head.querySelector('script[type="application/ld+json"][data-seo-schema]')?.remove()
 }
 
-function upsertStructuredData(page: GeneratedPage, canonical: string) {
+function upsertStructuredData(page: PageMetadata, canonical: string) {
   let element = document.head.querySelector<HTMLScriptElement>(
     'script[type="application/ld+json"][data-seo-schema]',
   )
@@ -82,7 +82,7 @@ function upsertStructuredData(page: GeneratedPage, canonical: string) {
   element.textContent = JSON.stringify(schema)
 }
 
-export function applyPageMetadata(page: GeneratedPage) {
+export function applyPageMetadata(page: PageMetadata) {
   const canonical = canonicalUrl(page)
   const socialImage = socialImageUrl(page)
 

@@ -11,4 +11,5 @@ for attempt in $(seq 1 30); do
   if curl --silent --fail --max-time 1 "http://127.0.0.1:$PORT/" > /dev/null; then break; fi
   sleep 1
 done
+python3 scripts/cache-smoke.py
 QA_WEBKIT=1 python3 scripts/browser-smoke.py --base "http://127.0.0.1:$PORT"
