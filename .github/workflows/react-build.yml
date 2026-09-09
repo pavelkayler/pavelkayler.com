@@ -29,7 +29,8 @@ jobs:
         run: npm run build
       - name: Install media and browser tools
         run: |
-          sudo apt-get update -qq
+          bash scripts/prepare-ci-apt.sh
+          sudo apt-get update -qq -o Acquire::Retries=3
           sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --quiet pillow playwright==1.57.0
           python3 -m playwright install --with-deps chromium webkit

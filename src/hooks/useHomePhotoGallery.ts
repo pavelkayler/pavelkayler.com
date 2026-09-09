@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { requestImage } from '../app/imageResources'
 
 type LightboxInstance = {
   init: () => void
@@ -25,8 +26,7 @@ export function useHomePhotoGallery() {
       if (lightbox) return Promise.resolve(lightbox)
       if (initialization) return initialization
 
-      // Neither module is downloaded merely to display the homepage. Load both on
-      // first intent so a failed import can fall back to the actual image link.
+      // Startup warms both modules; retain local binding and opt-out recovery.
       initialization = Promise.all([
         import('photoswipe/lightbox'),
         import('photoswipe'),
@@ -53,11 +53,13 @@ export function useHomePhotoGallery() {
 
     const handleFirstClick = (event: MouseEvent) => {
       // Once ready, PhotoSwipe's native delegated click handler takes over.
-      if (lightbox || cancelled || event.defaultPrevented || event.button !== 0 ||
+      if (cancelled || event.defaultPrevented || event.button !== 0 ||
           event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
       if (!(event.target instanceof Element)) return
       const anchor = event.target.closest(PHOTO_SELECTOR)
       if (!(anchor instanceof HTMLAnchorElement) || !gallery.contains(anchor)) return
+      void requestImage(anchor.href, 0).catch(() => undefined)
+      if (lightbox) return
       const links = Array.from(gallery.querySelectorAll<HTMLAnchorElement>(PHOTO_SELECTOR))
       const index = links.indexOf(anchor)
       if (index < 0) return

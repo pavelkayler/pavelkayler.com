@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { getInitialPhase, subscribeInitialPhase } from '../app/siteLoading'
 import type { HomeContent } from '../content/types'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { LogoSpacer } from './LogoSpacer'
@@ -7,14 +8,15 @@ import { StructuredImage } from './StructuredImage'
 export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
   const [active, setActive] = useState(0)
   const reducedMotion = usePrefersReducedMotion()
+  const phase = useSyncExternalStore(subscribeInitialPhase, getInitialPhase)
 
   useEffect(() => {
-    if (reducedMotion || cover.slides.length < 2) return
+    if (phase === 'loading' || reducedMotion || cover.slides.length < 2) return
     const timer = window.setInterval(() => {
       setActive((current) => (current + 1) % cover.slides.length)
     }, cover.delay)
     return () => window.clearInterval(timer)
-  }, [cover.delay, cover.slides.length, reducedMotion])
+  }, [cover.delay, cover.slides.length, reducedMotion, phase])
 
   const scrollDown = () => {
     document.getElementById('home-main')?.scrollIntoView({
@@ -45,7 +47,7 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
                 <StructuredImage
                   image={slide}
                   sizes="100vw"
-                  loading={index === 0 ? 'eager' : 'lazy'}
+                  loading="eager"
                   fetchPriority={index === 0 ? 'high' : 'low'}
                 />
               </div>

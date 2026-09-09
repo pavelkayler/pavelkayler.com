@@ -35,6 +35,7 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await page.screenshot(path=str(output/f'{name}-{label}.png'), animations='disabled')
 
     async def settled():
+        await page.wait_for_function("document.documentElement.dataset.siteLoadState !== undefined", timeout=90000)
         await page.locator('.page-header').wait_for(state='visible')
         await page.evaluate('document.fonts.ready')
         await page.wait_for_timeout(400)

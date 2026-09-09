@@ -54,6 +54,7 @@ export function HomePage() {
                         >
                           <StructuredImage
                             image={column.image}
+                            loading="eager"
                             sizes={row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw'}
                           />
                         </a>
@@ -79,7 +80,7 @@ export function HomePage() {
                   return (
                     <div className="listing-item js-listing-item" key={card.to}>
                       <Link className="listing-link" to={card.to} viewTransition onPointerEnter={warm} onFocus={warm} onPointerDown={warm}>
-                        <StructuredImage image={card.image} sizes="(max-width: 768px) 100vw, 33vw" />
+                        <StructuredImage image={card.image} loading="eager" sizes="(max-width: 768px) 100vw, 33vw" />
                         <div className="listing-caption"><div className="listing-title"><span>{card.title}</span></div></div>
                       </Link>
                     </div>
