@@ -1,17 +1,29 @@
 """Homepage photo regressions, shared by pre-deploy and live browser runs."""
 import asyncio
+import traceback
 from urllib.parse import urlparse
 
 
-async def check_home_gallery(page, browser, base, screenshot, swipe_next,
-                             width, height, mobile, scroller_js):
+async def check_home_gallery(*args, **kwargs):
+    try:
+        return await _check_home_gallery(*args, **kwargs)
+    except Exception as error:
+        raise AssertionError(traceback.format_exc()) from error
+
+
+async def _check_home_gallery(page, browser, base, screenshot, swipe_next,
+                              width, height, mobile, scroller_js):
     checks = []
+    def completed(message):
+        checks.append(message)
+        print(f'PASS {width}px {message}', flush=True)
+
     links = page.locator('#home-main .picture-section a.home-gallery-link')
     pictures = page.locator('#home-main .picture-section')
     count = await pictures.count()
     assert count == 8, f'Homepage picture inventory changed unexpectedly: {count}'
     assert await links.count() == count, 'Every homepage photograph must open the viewer'
-    assert await page.locator('#home-main .listing .home-gallery-link').count() == 0
+    assert await page.locator('#home-main .listing .home-gallery-link').count() == 0, 'Category cards joined the photo viewer'
 
     async def activate(link, keyboard=False):
         if mobile:
@@ -28,8 +40,7 @@ async def check_home_gallery(page, browser, base, screenshot, swipe_next,
         await p.wait_for_function('window.pswp?.currSlide?.content?.element?.naturalWidth > 0')
         assert await p.locator('.pswp').count() == 1, 'Duplicate lightbox instances'
 
-    # Test every picture, not just the first photo of a different route. Click
-    # the visible image area through its link; use real touch taps on mobile.
+    # Test each photograph through a click, keyboard activation or mobile tap.
     for index in range(count):
         link = links.nth(index)
         await link.scroll_into_view_if_needed()
@@ -41,7 +52,7 @@ async def check_home_gallery(page, browser, base, screenshot, swipe_next,
         await ready(page)
         state = await page.evaluate('({index:pswp.currIndex,count:pswp.getNumItems(),src:pswp.currSlide.data.src})')
         assert state == {'index':index,'count':count,'src':expected_src}, state
-        assert urlparse(page.url).path == '/', 'A photograph navigated away from home'
+        assert urlparse(page.url).path == '/', f'Photo {index+1} navigated away: {page.url}'
         if index in (0, 2, count-1):
             await screenshot(f'home-photo-{index+1}-lightbox')
         if index == 0:
@@ -58,30 +69,36 @@ async def check_home_gallery(page, browser, base, screenshot, swipe_next,
             await close.click()
         await page.locator('.pswp').wait_for(state='detached')
         after_scroll = await scroller.evaluate('(el) => el.scrollTop')
-        assert abs(before_scroll-after_scroll) < 4, f'Closing jumped scroll: {before_scroll} -> {after_scroll}'
-    checks.append('home: all 8 photos open the correct item; next, close and scroll preservation')
+        assert abs(before_scroll-after_scroll) < 4, f'Photo {index+1} closing jumped scroll: {before_scroll} -> {after_scroll}'
+    completed('home: all 8 photos open the correct item; next, close and scroll preservation')
 
-    # Category cards must remain navigation, not join the eight-image lightbox.
+    # URL updates can precede the React view-transition commit. Wait for the
+    # destination DOM before going Back instead of racing two transitions.
     cards = page.locator('#home-main .listing a.listing-link')
-    assert await cards.count() == 3
+    assert await cards.count() == 3, 'Expected three unchanged category navigation cards'
     target = urlparse(await cards.first.evaluate('(el) => el.href')).path.rstrip('/')
     await cards.first.click()
     await page.wait_for_url(lambda url: urlparse(str(url)).path.rstrip('/') == target)
-    assert await page.locator('.pswp--open').count() == 0
+    await page.locator('#home-main').wait_for(state='detached')
+    await page.locator('a.js-gallery-link').first.wait_for(state='visible')
+    await page.wait_for_timeout(400)
+    assert await page.locator('.pswp--open').count() == 0, 'Category card opened a photo instead of navigating'
     await page.go_back()
+    await page.wait_for_url(base+'/')
     await links.first.wait_for(state='visible')
-    assert urlparse(page.url).path == '/'
+    await page.wait_for_function("document.querySelector('.menu-list [aria-current=page]')?.textContent === 'HOME'")
+    await page.wait_for_timeout(400)
     await activate(links.nth(1))
     await ready(page)
-    assert await page.evaluate('pswp.currIndex') == 1
+    returned_index = await page.evaluate('pswp.currIndex')
+    assert returned_index == 1, f'Wrong photo after Back: {returned_index}'
     await page.locator('.pswp__button--close').click()
     await page.locator('.pswp').wait_for(state='detached')
     scroller = await page.evaluate_handle(scroller_js)
     await scroller.evaluate('(el) => { el.scrollTop = 0; }')
-    checks.append('home: category navigation unchanged; viewer reinitializes after Back')
+    completed('home: category navigation unchanged; viewer reinitializes after Back')
 
-    # A cold context prevents a successful internal-gallery test from preloading
-    # PhotoSwipe and accidentally masking the homepage's first-click failure.
+    # A fresh context prevents prior album visits from warming PhotoSwipe.
     cold = await browser.new_context(viewport={'width':width,'height':height},
                                     is_mobile=mobile, has_touch=mobile)
     failures, delayed = [], []
@@ -103,15 +120,15 @@ async def check_home_gallery(page, browser, base, screenshot, swipe_next,
             await link.click()
         await ready(p)
         assert delayed, 'Cold test did not exercise the delayed module request'
-        assert await p.evaluate('pswp.currIndex') == 2
-        assert urlparse(p.url).path == '/'
+        index = await p.evaluate('pswp.currIndex')
+        assert index == 2, f'Cold first click selected {index}, expected 2'
+        assert urlparse(p.url).path == '/', f'Cold photo navigated away: {p.url}'
         assert not failures, failures
     finally:
         await cold.close()
-    checks.append('home: cold first click opens selected photo despite delayed PhotoSwipe download')
+    completed('home: cold first click opens selected photo despite delayed PhotoSwipe download')
 
-    # Leaving home during the first download must not open a stale lightbox on
-    # the destination page. Keep the import pending until navigation completes.
+    # Leaving home mid-download must not open a stale viewer on another page.
     leaving = await browser.new_context(viewport={'width':width,'height':height},
                                        is_mobile=mobile, has_touch=mobile)
     release = asyncio.Event()
@@ -134,12 +151,13 @@ async def check_home_gallery(page, browser, base, screenshot, swipe_next,
         await asyncio.wait_for(requested.wait(), timeout=10)
         await p.locator('.menu-list a', has_text='WORKS').click()
         await p.wait_for_url('**/works')
+        await p.locator('#home-main').wait_for(state='detached')
         release.set()
         await p.wait_for_timeout(800)
-        assert await p.locator('.pswp--open').count() == 0
-        assert urlparse(p.url).path.rstrip('/') == '/works'
+        assert await p.locator('.pswp--open').count() == 0, 'Stale homepage viewer opened after leaving home'
+        assert urlparse(p.url).path.rstrip('/') == '/works', f'Pending click changed destination: {p.url}'
     finally:
         release.set()
         await leaving.close()
-    checks.append('home: pending viewer is cancelled when navigating away')
+    completed('home: pending viewer is cancelled when navigating away')
     return checks
