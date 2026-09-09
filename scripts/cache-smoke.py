@@ -126,7 +126,11 @@ async def main():
     match = re.search(r'/_app/(release-\d+-\d+|local)/site\.js$', assets.script)
     assert match, f'Missing versioned JS entry: {assets.script}'
     release = match[1]
-    assert len(assets.styles) >= 3, 'Expected copied theme/layout/responsive styles'
+    # Vite combines layout/responsive/app CSS. Only the manually copied theme
+    # keeps its old pathname; verify both groups rather than the source link count.
+    style_paths = [urlsplit(href).path for href in assets.styles]
+    assert any(p.endswith('/site-theme.css') for p in style_paths), 'Copied theme missing'
+    assert any(f'/_app/{release}/' in p and p.endswith('.css') for p in style_paths), 'Versioned CSS bundle missing'
     for file in DIST.rglob('*.html'):
         document = Assets()
         document.feed(file.read_text())
