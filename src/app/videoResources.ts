@@ -28,9 +28,10 @@ function release(video: HTMLVideoElement) {
   video.load()
   video.remove()
 }
-async function frameReady(video: HTMLVideoElement, requireFullBuffer: boolean) {
+async function frameReady(video: HTMLVideoElement, requireFullBuffer: boolean, sourceFailure: () => unknown) {
   const start = performance.now()
   for (;;) {
+    if (sourceFailure()) throw sourceFailure()
     if (video.error) throw new Error(`Video ${video.error.code}: ${video.error.message}`)
     const buffered = !requireFullBuffer || (Number.isFinite(video.duration) && video.buffered.length > 0 &&
       video.buffered.start(0) <= 0.1 && video.buffered.end(video.buffered.length - 1) >= video.duration - 0.1)
@@ -58,6 +59,7 @@ export function requestVideo(value: string, priority: number, retry = false) {
     for (const method of ['src-object', 'typed-source', 'native-http']) {
       const video = player()
       let objectUrl: string | undefined
+      let failure: unknown
       try {
         if (method === 'src-object') {
           Reflect.set(video, 'srcObject', blob)
@@ -66,13 +68,17 @@ export function requestVideo(value: string, priority: number, retry = false) {
           const source = document.createElement('source')
           source.type = 'video/mp4'
           source.src = objectUrl
+          // A failed <source> need not set video.error. Observe it directly so
+          // a known rejection never holds the whole site's spinner for 25 seconds.
+          source.onerror = () => { failure = new Error('Typed video source was rejected') }
           video.append(source)
         } else { video.src = url }
         video.load()
-        // Trigger frame preparation in engines that defer paused preload. This is
-        // muted and hidden by the startup mask; stop it immediately after readiness.
-        void video.play().catch(error => { errors.push(`${method} play: ${String(error)}`) })
-        await frameReady(video, method === 'native-http')
+        void video.play().catch(error => {
+          errors.push(`${method} play: ${String(error)}`)
+          if (!(error instanceof DOMException && error.name === 'NotAllowedError')) failure = error
+        })
+        await frameReady(video, method === 'native-http', () => failure)
         video.pause()
         video.currentTime = 0
         video.remove()
