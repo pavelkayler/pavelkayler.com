@@ -32,9 +32,13 @@ async def exercise(browser, base, output, name, mobile):
         for route in ('portraits', 'projects', 'brands'):
             await page.locator('.menu-list a', has_text='WORKS').click()
             await page.wait_for_url(re.compile(r'/works/?$'))
+            await page.locator('.works-route').wait_for(state='visible')
             await page.locator('#route-loader').wait_for(state='hidden')
             await page.locator(f'.works-route a.listing-link[href$="/{route}"]').click()
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
+            # History updates can precede the View Transition's DOM commit.
+            # Await the page container, never await individual image loads.
+            await page.locator('.album-masonry').wait_for(state='visible')
             await page.locator('#route-loader').wait_for(state='hidden')
             count = len(checks.album_data(route)['photos'])
             await checks.check_whole_album(page, count)
