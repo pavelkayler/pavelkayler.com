@@ -1,16 +1,29 @@
 import { ResourceQueue } from './resourceQueue'
-
 export interface ImageSpec { src: string; srcSet?: string; sizes?: string }
 export const resources = new ResourceQueue()
 export const resolveAsset = (value: string) => value.replaceAll('__BASE__', import.meta.env.BASE_URL)
-
-// Use the same viewport/DPR selection in the preloader and rendered photographs.
-export function imageUrl(spec: ImageSpec) {
-  const candidates = (spec.srcSet || '').split(',').flatMap(part => {
+const canonical = (value: string) => {
+  const url = new URL(value, location.href)
+  return url.origin === location.origin ? url.pathname + url.search : url.href
+}
+interface ResidentImage { image: HTMLImageElement; decoded: boolean }
+// Retain native handles for this document. Decode page images, not every zoom file.
+const residents = new Map<string, ResidentImage>()
+let residentSelection = false
+export function useResidentImageSelection() { residentSelection = true }
+export function imageCandidates(spec: ImageSpec) {
+  return (spec.srcSet || '').split(',').flatMap(part => {
     const match = part.trim().match(/^(\S+)\s+(\d+)w$/)
     return match ? [{ url: resolveAsset(match[1]), width: Number(match[2]) }] : []
   }).sort((a, b) => a.width - b.width)
+}
+export function imageUrl(spec: ImageSpec) {
+  let candidates = imageCandidates(spec)
   if (!candidates.length) return resolveAsset(spec.src)
+  if (residentSelection) {
+    const available = candidates.filter(item => residents.has(canonical(item.url)))
+    if (available.length) candidates = available
+  }
   let slot = window.innerWidth
   for (const size of (spec.sizes || '100vw').split(',')) {
     const match = size.trim().match(/^(?:(\(.+\))\s+)?([\d.]+)(vw|px)$/)
@@ -20,9 +33,8 @@ export function imageUrl(spec: ImageSpec) {
     break
   }
   const pixels = slot * (window.devicePixelRatio || 1)
-  return (candidates.find(candidate => candidate.width >= pixels) || candidates[candidates.length - 1]).url
+  return (candidates.find(item => item.width >= pixels) || candidates[candidates.length - 1]).url
 }
-
 let viewportRevision = 0
 const viewportListeners = new Set<() => void>()
 let resizeTimer: number | undefined
@@ -38,60 +50,28 @@ window.addEventListener('resize', () => {
     for (const listener of viewportListeners) listener()
   }, 120)
 })
-
-const canonicalResource = (value: string) => {
-  const url = new URL(value, location.href)
-  return url.origin === location.origin ? url.pathname + url.search : url.href
+export const imageTaskId = (url: string) => `image:${canonical(url)}`
+export const imageIsDownloaded = (url: string) => residents.has(canonical(url))
+export function imageIsPrepared(url: string) {
+  const record = residents.get(canonical(url))
+  return Boolean(record?.decoded && record.image.complete && record.image.naturalWidth > 0)
 }
 const demands = new Map<string, { decode: boolean; image?: HTMLImageElement }>()
-const coreImages = new Map<string, HTMLImageElement>()
-const pageImages = new Map<string, HTMLImageElement>()
-let pageUrls = new Set<string>()
-
-// Keep only core-page handles plus the selected page's display-sized photographs.
-// Replacing the selection releases the previous album; never pin every album/zoom.
-export function retainPageImages(urls: string[]) {
-  pageUrls = new Set(urls.map(canonicalResource))
-  for (const url of pageImages.keys()) if (!pageUrls.has(url)) pageImages.delete(url)
-}
-function retainPreparedImage(url: string, image: HTMLImageElement) {
-  if (/\/media\/images\/(home|navigation|contacts|branding)\//.test(url)) {
-    coreImages.delete(url)
-    coreImages.set(url, image)
-    while (coreImages.size > 32) coreImages.delete(coreImages.keys().next().value!)
-  }
-  if (pageUrls.has(url)) pageImages.set(url, image)
-}
-export const imageTaskId = (url: string) => `image:${canonicalResource(url)}`
-export function imageIsPrepared(url: string) {
-  const key = canonicalResource(url)
-  const image = pageImages.get(key) || coreImages.get(key)
-  return resources.get(imageTaskId(key))?.state === 'ready' &&
-    Boolean(image?.complete && image.naturalWidth > 0)
-}
-export const imageIsDownloaded = (url: string) => resources.get(imageTaskId(url))?.state === 'ready'
-
 function transferImage(url: string, demand: { decode: boolean; image?: HTMLImageElement }, priority: number) {
   return new Promise<void>((resolve, reject) => {
     const image = new Image()
     demand.image = image
-    image.decoding = 'async'
-    image.fetchPriority = priority <= 10 ? 'high' : 'low'
+    image.decoding = 'async'; image.fetchPriority = priority <= 1 ? 'high' : 'auto'
     let done = false
     const finish = (error?: unknown) => {
       if (done) return
       done = true
       window.clearTimeout(timer)
-      image.onload = image.onerror = null
-      demand.image = undefined
+      image.onload = image.onerror = null; demand.image = undefined
       if (error) { image.removeAttribute('src'); reject(error) }
-      else {
-        if (demand.decode) retainPreparedImage(url, image)
-        resolve()
-      }
+      else { residents.set(url, { image, decoded: demand.decode }); resolve() }
     }
-    // A timeout is a recoverable failure, never permission to hide the loader.
-    const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 60000)
+    const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 120000)
     image.onerror = () => finish(new Error(`Image unavailable: ${url}`))
     image.onload = () => {
       if (!image.naturalWidth) return finish(new Error(`Empty image: ${url}`))
@@ -101,42 +81,30 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
     image.src = url
   })
 }
-
 export function requestImage(url: string, priority: number, decode = false, retry = false) {
-  url = canonicalResource(url)
+  url = canonical(url)
   let demand = demands.get(url)
   if (!demand) { demand = { decode }; demands.set(url, demand) }
   demand.decode ||= decode
   const current = demand
   return resources.request(imageTaskId(url), async () => {
     for (let attempt = 0; ; attempt += 1) {
-      try { await transferImage(url, current, resources.get(imageTaskId(url))?.priority ?? priority); return }
-      catch (error) {
+      try {
+        const resident = residents.get(url)
+        if (resident) {
+          if (current.decode && !resident.decoded) { await resident.image.decode(); resident.decoded = true }
+        } else { await transferImage(url, current, resources.get(imageTaskId(url))?.priority ?? priority) }
+        return
+      } catch (error) {
         if (attempt >= 1 || !navigator.onLine) throw error
         await new Promise(resolve => window.setTimeout(resolve, 600))
       }
     }
   }, priority, {
-    retry,
-    // A historical ready flag is insufficient after releasing an album's handles.
-    refresh: decode && !imageIsPrepared(url),
+    retry, refresh: decode && !imageIsPrepared(url),
     promote: () => { if (current.image) current.image.fetchPriority = 'high' },
   })
 }
-
-export function requestVideo(url: string, priority: number, retry = false) {
-  return resources.request(`video:${url}`, async () => {
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 120000)
-    try {
-      const response = await fetch(url, { signal: controller.signal, cache: 'default' })
-      if (!response.ok) throw new Error(`Video HTTP ${response.status}: ${url}`)
-      const reader = response.body?.getReader()
-      if (reader) { while (!(await reader.read()).done) { /* Consume into the HTTP cache. */ } }
-    } finally { window.clearTimeout(timer) }
-  }, priority, { retry })
-}
-
 export function waitAbortable<T>(promise: Promise<T>, signal: AbortSignal) {
   return new Promise<T>((resolve, reject) => {
     const aborted = () => reject(new DOMException('Navigation superseded', 'AbortError'))

@@ -12,51 +12,19 @@ body {
   min-height: 100vh;
 }
 
+/* Fade the prepared route without a browser snapshot/update callback. The native
+   View Transition callback timed out in live WebKit while browsing whole albums.
+   This animation does not pause rendering or delay the data-router commit; the
+   independent loading overlay still shields any pending image decode. Header and
+   persistent logo are outside this element and do not blink between pages. */
 .react-route {
   min-height: 1px;
+  animation: react-route-enter 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @keyframes react-route-enter {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes react-route-view-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-@keyframes react-route-view-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Browsers without the View Transitions API still get a lightweight route fade.
-   Supporting browsers use React Router's viewTransition navigation instead, so we
-   avoid stacking a second animation on the newly mounted route. */
-@supports not (view-transition-name: none) {
-  .react-route {
-    animation: react-route-enter 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  }
-}
-
-::view-transition-old(root) {
-  animation: react-route-view-out 180ms ease-out both;
-}
-
-::view-transition-new(root) {
-  animation: react-route-view-in 280ms ease-out both;
-}
-
-/* The logo is owned by MainLayout and never unmounts between routes. Keep it in its
-   own transition layer so page cross-fades do not make the brand mark blink. */
-.persistent-site-logo {
-  view-transition-name: site-logo;
-}
-
-::view-transition-old(site-logo),
-::view-transition-new(site-logo) {
-  animation: none;
 }
 
 .page-header .menu-list .link {

@@ -12,7 +12,6 @@ export function SiteLogo() {
         className="logo-link"
         title="pavelkayler.com"
         to="/"
-        viewTransition
         onPointerEnter={warmHome}
         onFocus={warmHome}
         onPointerDown={warmHome}

@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from home_gallery_checks import check_home_gallery
+from delayed_module_origin import DelayedModuleOrigin
 
 SCROLLER = """() => [...document.querySelectorAll('*')].find(el =>
   el.clientWidth > innerWidth * .7 && el.clientHeight > innerHeight * .5 &&
@@ -43,8 +44,6 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await page.wait_for_function("document.querySelector('.logo-image')?.naturalWidth > 0")
 
     async def swipe_next():
-        # A timed pointer drag lets the animation-frame gesture engine observe
-        # the movement in Chromium and WebKit, rather than all events in one frame.
         await page.mouse.move(width*.8, height*.55)
         await page.mouse.down()
         await page.wait_for_timeout(40)
@@ -128,20 +127,21 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             checks.append(route+': first click, next image gesture/control, close, return to gallery')
 
         stage = 'delayed first click'
+        delayed_origin = DelayedModuleOrigin(base, delay=2)
         early = await browser.new_context(viewport={"width":width,"height":height}, is_mobile=mobile, has_touch=mobile)
-        async def delay_lightbox(route):
-            if 'lightbox' in route.request.url.lower() and route.request.resource_type == 'script':
-                await asyncio.sleep(2)
-            await route.continue_()
-        await early.route('**/*', delay_lightbox)
-        p = await early.new_page()
-        p.on('pageerror', lambda error: failures.append('Early click JavaScript: '+str(error)))
-        await p.goto(base+'/portraits/', wait_until='domcontentloaded')
-        await p.locator('a.js-gallery-link').first.click()
-        await p.locator('.pswp--open').wait_for(state='visible', timeout=30000)
-        assert urlparse(p.url).path.rstrip('/') == '/portraits'
-        await early.close()
-        checks.append('cold first click with delayed lightbox controller')
+        try:
+            p = await early.new_page()
+            p.set_default_timeout(90000)
+            p.on('pageerror', lambda error: failures.append('Early click JavaScript: '+str(error)))
+            await p.goto(delayed_origin.base+'/portraits/', wait_until='domcontentloaded')
+            await p.locator('a.js-gallery-link').first.click()
+            await p.locator('.pswp--open').wait_for(state='visible')
+            assert delayed_origin.delayed, 'Album test did not exercise the delayed module response'
+            assert urlparse(p.url).path.rstrip('/') == '/portraits'
+        finally:
+            await early.close()
+            delayed_origin.close()
+        checks.append('cold first click with HTTP-delayed lightbox controller and real Service Worker')
         assert not failures, '\n'.join(failures)
         return {'name':name,'passed':True,'checks':checks,'errors':[]}
     except Exception as error:

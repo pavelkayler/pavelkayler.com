@@ -1,47 +1,25 @@
-import { useEffect, useLayoutEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import { Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
-import { NavigationProgress } from '../components/NavigationProgress'
 import { SiteLogo } from '../components/SiteLogo'
 import { pages, type PageKey } from '../content/page-metadata'
-import { scheduleRouteWarmup } from '../app/prefetch'
 import { applyPageMetadata } from '../app/seo'
 
 const routeToKey: Record<string, PageKey> = {
-  '/': 'home',
-  '/works': 'works',
-  '/portraits': 'portraits',
-  '/projects': 'projects',
-  '/brands': 'brands',
-  '/contacts': 'contacts',
+  '/': 'home', '/works': 'works', '/portraits': 'portraits',
+  '/projects': 'projects', '/brands': 'brands', '/contacts': 'contacts',
 }
-
-function normalizePath(pathname: string) {
-  if (pathname === '/') return '/'
-  return pathname.replace(/\/+$/, '') || '/'
-}
-
 export function MainLayout() {
   const { pathname } = useLocation()
-  const normalizedPath = normalizePath(pathname)
-  const pageKey = routeToKey[normalizedPath]
-  const page = pageKey ? pages[pageKey] : undefined
-  const isHomeRoute = normalizedPath === '/'
-
-  useLayoutEffect(() => {
-    if (page) applyPageMetadata(page)
-  }, [page])
-
-  useEffect(() => scheduleRouteWarmup(normalizedPath), [normalizedPath])
-
+  const path = pathname.replace(/\/+$/, '') || '/'
+  const key = routeToKey[path]
+  const page = key ? pages[key] : undefined
+  useLayoutEffect(() => { if (page) applyPageMetadata(page) }, [page])
   return (
-    <div className={`page-wrapper react-page-wrapper${isHomeRoute ? ' is-home-route' : ''}`}>
+    <div className={`page-wrapper react-page-wrapper${path === '/' ? ' is-home-route' : ''}`}>
       <Header overlay={page?.hasCover ?? false} />
-      <div className="persistent-site-logo">
-        <SiteLogo />
-      </div>
-      <NavigationProgress />
+      <div className="persistent-site-logo"><SiteLogo /></div>
       <Outlet />
       <Footer />
       <ScrollRestoration />
