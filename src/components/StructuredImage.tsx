@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { StructuredImage as StructuredImageData } from '../content/types'
 import { imageIsPrepared, imageUrl, resources, subscribeViewport, viewportSnapshot } from '../app/imageResources'
+import { getInitialPhase, subscribeInitialPhase } from '../app/siteLoading'
 import { observeAhead } from '../app/aheadLoading'
 export { resolveAsset } from '../app/imageResources'
 
@@ -16,7 +17,8 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
   const [displayedSrc, setDisplayedSrc] = useState('')
   const [near, setNear] = useState(false)
   const [failedSrc, setFailedSrc] = useState('')
-  useSyncExternalStore(subscribeViewport, viewportSnapshot)
+  const phase = useSyncExternalStore(subscribeInitialPhase, getInitialPhase)
+  const viewport = useSyncExternalStore(subscribeViewport, viewportSnapshot)
   useSyncExternalStore(resources.subscribe, resources.getRevision)
   const src = imageUrl({ ...image, sizes })
   const prepared = imageIsPrepared(src) && failedSrc !== src
@@ -39,8 +41,9 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
   useLayoutEffect(() => {
     const element = containerRef.current
     if (!element || loading === 'eager' || near) return
+    // Unlocking the startup mask can turn BODY into the real mobile scrollport.
     return observeAhead(element, () => setNear(true))
-  }, [loading, near])
+  }, [loading, near, phase, viewport])
   return (
     <div ref={containerRef} className={`lazy-image js-lazy-image${shown ? ' is-loaded is-prepared' : ''}`}
       data-role="lazy-image" data-width={image.width} data-height={image.height} data-aspect={image.aspect}
@@ -52,4 +55,3 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
         onError={() => { setFailedSrc(src); setDisplayedSrc('') }} />
     </div>
   )
-}

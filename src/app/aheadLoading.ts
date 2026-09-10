@@ -8,7 +8,9 @@ interface Group {
 const groups = new Map<Element | null, Group>()
 export function scrollingRoot(element: Element): Element | null {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-    if (parent === document.body || parent === document.documentElement) return null
+    if (parent === document.scrollingElement || parent === document.documentElement) return null
+    // BODY can itself be the nested scrollport when the mobile theme combines
+    // a viewport height with overflow-x:hidden (which computes overflow-y:auto).
     if (/(auto|scroll|overlay)/.test(getComputedStyle(parent).overflowY) &&
         parent.clientHeight > 0 && parent.scrollHeight > parent.clientHeight + 1) return parent
   }
@@ -22,7 +24,6 @@ function drop(root: Element | null, group: Group) {
   if (groups.get(root) === group) groups.delete(root)
 }
 export function observeAhead(element: Element, ready: () => void) {
-  // Native loading remains a functional fallback without this optional API.
   if (typeof IntersectionObserver === 'undefined') return () => undefined
   let detach: () => void = () => undefined
   const frame = requestAnimationFrame(() => {
