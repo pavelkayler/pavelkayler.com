@@ -4,9 +4,7 @@ export interface ImageSpec { src: string; srcSet?: string; sizes?: string }
 export const resources = new ResourceQueue()
 export const resolveAsset = (value: string) => value.replaceAll('__BASE__', import.meta.env.BASE_URL)
 
-// Selection is shared by the queue AND rendered images, avoiding preloading one
-// srcset candidate and then downloading another on route entry. The site's sizes
-// use media queries followed by px/vw lengths; unsupported expressions fail early.
+// Use the same viewport/DPR selection in the preloader and rendered photographs.
 export function imageUrl(spec: ImageSpec) {
   const candidates = (spec.srcSet || '').split(',').flatMap(part => {
     const match = part.trim().match(/^(\S+)\s+(\d+)w$/)
@@ -41,26 +39,35 @@ window.addEventListener('resize', () => {
   }, 120)
 })
 
-const decoded = new Set<string>()
-const demands = new Map<string, { decode: boolean; image?: HTMLImageElement }>()
-// Do not immediately discard the detached preload elements for the core pages.
-// Keeping their native handles avoids losing the warmed Contacts/Home resources
-// while speculative album transfers fill an ephemeral browser's image cache.
-// This is bounded and never pins the complete albums or their zoom variants.
-const coreImages = new Map<string, HTMLImageElement>()
-function retainCoreImage(url: string, image: HTMLImageElement) {
-  if (!/\/media\/images\/(home|navigation|contacts|branding)\//.test(url)) return
-  coreImages.delete(url)
-  coreImages.set(url, image)
-  while (coreImages.size > 32) coreImages.delete(coreImages.keys().next().value!)
-}
 const canonicalResource = (value: string) => {
   const url = new URL(value, location.href)
   return url.origin === location.origin ? url.pathname + url.search : url.href
 }
+const demands = new Map<string, { decode: boolean; image?: HTMLImageElement }>()
+const coreImages = new Map<string, HTMLImageElement>()
+const pageImages = new Map<string, HTMLImageElement>()
+let pageUrls = new Set<string>()
+
+// Keep only core-page handles plus the selected page's display-sized photographs.
+// Replacing the selection releases the previous album; never pin every album/zoom.
+export function retainPageImages(urls: string[]) {
+  pageUrls = new Set(urls.map(canonicalResource))
+  for (const url of pageImages.keys()) if (!pageUrls.has(url)) pageImages.delete(url)
+}
+function retainPreparedImage(url: string, image: HTMLImageElement) {
+  if (/\/media\/images\/(home|navigation|contacts|branding)\//.test(url)) {
+    coreImages.delete(url)
+    coreImages.set(url, image)
+    while (coreImages.size > 32) coreImages.delete(coreImages.keys().next().value!)
+  }
+  if (pageUrls.has(url)) pageImages.set(url, image)
+}
 export const imageTaskId = (url: string) => `image:${canonicalResource(url)}`
 export function imageIsPrepared(url: string) {
-  return resources.get(imageTaskId(url))?.state === 'ready' && decoded.has(canonicalResource(url))
+  const key = canonicalResource(url)
+  const image = pageImages.get(key) || coreImages.get(key)
+  return resources.get(imageTaskId(key))?.state === 'ready' &&
+    Boolean(image?.complete && image.naturalWidth > 0)
 }
 export const imageIsDownloaded = (url: string) => resources.get(imageTaskId(url))?.state === 'ready'
 
@@ -79,17 +86,17 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
       demand.image = undefined
       if (error) { image.removeAttribute('src'); reject(error) }
       else {
-        if (demand.decode) retainCoreImage(url, image)
+        if (demand.decode) retainPreparedImage(url, image)
         resolve()
       }
     }
-    // Timeout is a failure with recovery controls, never permission to hide the loader.
+    // A timeout is a recoverable failure, never permission to hide the loader.
     const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 60000)
     image.onerror = () => finish(new Error(`Image unavailable: ${url}`))
     image.onload = () => {
       if (!image.naturalWidth) return finish(new Error(`Empty image: ${url}`))
       if (!demand.decode) return finish()
-      void image.decode().then(() => { decoded.add(url); finish() }, finish)
+      void image.decode().then(() => finish(), finish)
     }
     image.src = url
   })
@@ -111,7 +118,8 @@ export function requestImage(url: string, priority: number, decode = false, retr
     }
   }, priority, {
     retry,
-    refresh: decode && !decoded.has(url),
+    // A historical ready flag is insufficient after releasing an album's handles.
+    refresh: decode && !imageIsPrepared(url),
     promote: () => { if (current.image) current.image.fetchPriority = 'high' },
   })
 }
@@ -123,9 +131,8 @@ export function requestVideo(url: string, priority: number, retry = false) {
     try {
       const response = await fetch(url, { signal: controller.signal, cache: 'default' })
       if (!response.ok) throw new Error(`Video HTTP ${response.status}: ${url}`)
-      // Consume without holding a video-sized Blob or ArrayBuffer in JS memory.
       const reader = response.body?.getReader()
-      if (reader) { while (!(await reader.read()).done) { /* HTTP cache fill */ } }
+      if (reader) { while (!(await reader.read()).done) { /* Consume into the HTTP cache. */ } }
     } finally { window.clearTimeout(timer) }
   }, priority, { retry })
 }

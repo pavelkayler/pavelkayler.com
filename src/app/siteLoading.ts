@@ -1,11 +1,13 @@
 import { allRoutes, albumPlan, coverVideos, fullscreenImages, mainPlans, normalizeRoute,
   routeName, screenPlan, startupPlan } from '../content/loading-plan'
 import { imageTaskId, imageUrl, requestImage, requestVideo, resources, resolveAsset,
-  subscribeViewport, waitAbortable, type ImageSpec } from './imageResources'
+  retainPageImages, subscribeViewport, waitAbortable, type ImageSpec } from './imageResources'
 import { preloadRouteModule } from './routeModules'
 
 export type InitialPhase = 'loading' | 'ready' | 'degraded'
 let initialPhase: InitialPhase = 'loading'
+let partialPage: string | null = null
+export const pageMayBePartial = (path: string) => partialPage === normalizeRoute(path)
 const phaseListeners = new Set<() => void>()
 export const getInitialPhase = () => initialPhase
 export const subscribeInitialPhase = (listener: () => void) => {
@@ -14,6 +16,7 @@ export const subscribeInitialPhase = (listener: () => void) => {
 }
 export function finishInitialLoading(phase: 'ready' | 'degraded') {
   initialPhase = phase
+  partialPage = phase === 'degraded' ? currentSiteRoute() : null
   document.documentElement.dataset.siteLoadState = phase
   for (const listener of phaseListeners) listener()
 }
@@ -66,14 +69,30 @@ export function resourceProgress(ids: string[]) {
   return { total: ids.length, ready: ids.filter(id => resources.get(id)?.state === 'ready').length,
     failed: ids.filter(id => resources.get(id)?.state === 'error').length }
 }
-export function prepareStartup(path: string, retry = false): ResourceWork {
-  const routes = [...new Set(['/', '/works', '/contacts', path].filter(route => allRoutes.includes(route)))]
-  return work([...imageWork(startupPlan(path), 0, true, retry),
-    ...routes.map(route => codeTask(route, 0, retry)), viewerTask(0, retry), fontTask(retry)])
+function pagePlan(path: string): ImageSpec[] {
+  // Include every page-sized photograph and related card; never zoom files/videos.
+  return [...screenPlan(path), ...(mainPlans[path] || albumPlan(path))]
 }
-export function prepareScreen(path: string, priority = 0, retry = false): ResourceWork {
-  return work([...imageWork(screenPlan(path), priority, priority <= 10, retry),
+export function prepareStartup(path: string, retry = false): ResourceWork {
+  path = normalizeRoute(path)
+  const routes = [...new Set(['/', '/works', '/contacts', path].filter(route => allRoutes.includes(route)))]
+  retainPageImages(pagePlan(path).map(imageUrl))
+  return work([...imageWork(startupPlan(path), 0, true, retry),
+    ...routes.map(route => codeTask(route, 0, retry)), viewerTask(0, retry), fontTask(retry),
+    // Direct album URLs also wait for the complete selected page. Core resources
+    // retain first priority; unrelated albums remain background-only after reveal.
+    ...imageWork(pagePlan(path), 1, true, retry)])
+}
+export function prepareScreen(path: string, priority = 20, retry = false): ResourceWork {
+  return work([...imageWork(screenPlan(path), priority, false, retry),
     codeTask(path, priority, retry),
+    ...(path === '/' || !mainPlans[path] ? [viewerTask(priority, retry)] : [])])
+}
+export function preparePage(path: string, priority = 0, retry = false): ResourceWork {
+  path = normalizeRoute(path)
+  const images = pagePlan(path)
+  retainPageImages(images.map(imageUrl))
+  return work([...imageWork(images, priority, true, retry), codeTask(path, priority, retry),
     ...(path === '/' || !mainPlans[path] ? [viewerTask(priority, retry)] : [])])
 }
 
@@ -85,8 +104,6 @@ function queueBackground() {
   for (const path of allRoutes) prepareScreen(path, 20)
   for (const path of allRoutes) imageWork(mainPlans[path] || albumPlan(path), 30, false, false)
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
-  // Explicit user data-saving preference keeps all page-size images but avoids
-  // speculatively transferring large zoom versions and full video files.
   if (!connection?.saveData) {
     for (const src of fullscreenImages) void requestImage(resolveAsset(src), 40).catch(() => undefined)
     for (const src of coverVideos) void requestVideo(resolveAsset(src), 50).catch(() => undefined)
@@ -100,14 +117,12 @@ export function startSiteWarmup() {
   window.addEventListener('offline', pauseBackground)
   window.addEventListener('online', () => {
     pauseBackground()
-    // Retry failed image/speculative tasks only after a genuine reconnection.
     for (const task of resources.all()) {
       if (task.state === 'error') void resources.request(task.id, task.operation, task.priority, { retry: true })
     }
   })
   subscribeViewport(() => {
-    // Never reuse a narrow-screen readiness decision after rotation/resizing.
-    prepareScreen(currentSiteRoute(), 5)
+    preparePage(currentSiteRoute(), 5)
     queueBackground()
   })
   queueBackground()
@@ -136,11 +151,11 @@ function publishNavigation(value: NavigationStatus | null) {
   for (const listener of navigationListeners) listener()
 }
 
-/** Data-router loader: keeps the previous route painted until its successor is ready. */
+/** Keep the current route until the ENTIRE destination's display images decode. */
 export async function prepareNavigation(path: string, signal: AbortSignal) {
-  // First entry renders behind the global loader; it handles the entire startup set.
   if (initialPhase === 'loading') return null
   path = normalizeRoute(path)
+  partialPage = null
   const token = ++generation
   let slow = false
   let current: ResourceWork | undefined
@@ -153,13 +168,17 @@ export async function prepareNavigation(path: string, signal: AbortSignal) {
   try {
     let retry = false
     while (!signal.aborted) {
+      const viewport = `${window.innerWidth}:${window.devicePixelRatio}`
       const action = new Promise<'retry' | 'continue'>(resolve => { recovery = resolve })
-      current = prepareScreen(path, 0, retry)
+      current = preparePage(path, 0, retry)
       update()
       const result = await waitAbortable(Promise.race([current.finished, action]), signal)
-      if (result === true || result === 'continue') return null
+      if (result === true) {
+        if (viewport !== `${window.innerWidth}:${window.devicePixelRatio}`) { retry = false; continue }
+        return null
+      }
       const choice = result === false ? await waitAbortable(action, signal) : result
-      if (choice === 'continue') return null
+      if (choice === 'continue') { partialPage = path; return null }
       retry = true
     }
     throw new DOMException('Navigation superseded', 'AbortError')
@@ -170,7 +189,6 @@ export async function prepareNavigation(path: string, signal: AbortSignal) {
   }
 }
 
-// Read-only diagnostics for support and regression tests. No control/backdoor API.
 Object.defineProperty(window, '__portfolioLoading', { configurable: true, get: () => ({
   phase: initialPhase,
   tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
