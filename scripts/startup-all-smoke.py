@@ -106,9 +106,10 @@ async def cold(browser,name,mobile,entry):
             await page.locator('.pswp__button--close').click();await page.locator('.pswp').wait_for(state='detached')
             if album.get('cover') and album['cover'].get('videoSrc'):
                 stage=route+': video'
-                video=page.locator('video').first
+                video=page.locator('#root .cover-video video')
+                assert await video.count()==1,'Missing or duplicate active cover player'
                 await video.scroll_into_view_if_needed()
-                await page.wait_for_function('document.querySelector("video")?.readyState >= 2',timeout=15000)
+                await page.wait_for_function('document.querySelector("#root .cover-video video")?.readyState >= 2',timeout=15000)
                 state=await video.evaluate('(v)=>({error:v.error?{code:v.error.code,message:v.error.message}:null,time:v.currentTime,width:v.videoWidth})')
                 assert state['error'] is None and state['width']>0,state
             await page.go_back();await page.locator('.works-route').wait_for()
