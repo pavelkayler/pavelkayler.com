@@ -25,15 +25,14 @@ function release(video: HTMLVideoElement) {
   try { video.srcObject = null } catch { /* URL-backed player. */ }
   video.removeAttribute('src'); video.replaceChildren(); video.load(); video.remove()
 }
-async function frameReady(video: HTMLVideoElement, nativeHttp: boolean, sourceFailure: () => unknown) {
+async function frameReady(video: HTMLVideoElement, sourceFailure: () => unknown) {
   const start = performance.now()
   for (;;) {
     if (sourceFailure()) throw sourceFailure()
     if (video.error) throw new Error(`Video ${video.error.code}: ${video.error.message}`)
-    // Full transfer is established by response.blob(), NOT by TimeRanges. WebKit
-    // reports empty buffered ranges for this short MP4 even at HAVE_ENOUGH_DATA.
-    // Retain its already-usable player and verify reuse with the origin unavailable.
-    if (video.readyState >= (nativeHttp ? 4 : 2) && video.videoWidth > 0) return
+    // TimeRanges is not a byte-download counter. The full response is retained
+    // separately; this check establishes an actual usable native decoder/frame.
+    if (video.readyState >= 4 && video.videoWidth > 0 && !video.seeking) return
     if (performance.now() - start > 25000) throw new Error(`Preparation timeout (ready=${video.readyState}, duration=${video.duration})`)
     await new Promise(resolve => window.setTimeout(resolve, 50))
   }
@@ -54,7 +53,9 @@ export function requestVideo(value: string, priority: number, retry = false) {
       blob = await response.blob()
       if (!blob.size) throw new Error(`Empty video: ${url}`)
     } finally { window.clearTimeout(timeout) }
-    for (const method of ['src-object', 'typed-source', 'native-http']) {
+    // Reusing a native HTTP player avoids the late Blob decoder failures observed
+    // on WebKit. Unlike the old implementation, it is created BEFORE site reveal.
+    for (const method of ['native-http', 'typed-source', 'src-object']) {
       const video = player()
       let objectUrl: string | undefined
       let failure: unknown
@@ -73,8 +74,12 @@ export function requestVideo(value: string, priority: number, retry = false) {
           errors.push(`${method} play: ${String(error)}`)
           if (!(error instanceof DOMException && error.name === 'NotAllowedError')) failure = error
         })
-        await frameReady(video, method === 'native-http', () => failure)
-        video.pause(); video.currentTime = 0; video.remove()
+        await frameReady(video, () => failure)
+        video.pause()
+        if (video.currentTime > 0) video.currentTime = 0
+        await frameReady(video, () => failure)
+        // Keep the player attached in its invisible parking host until a cover
+        // adopts it. Do not reset its source or replace its decoder between routes.
         players.set(url, { element: video, blob, bytes: blob.size, method, objectUrl })
         return
       } catch (error) {
