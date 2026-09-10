@@ -36,7 +36,7 @@ class Server:
         self.release = threading.Event()
         self.hero_requested = threading.Event()
         hero = content('home')['cover']['slides'][0]['src']
-        self.hero = re.sub(r'-\d+x\d+(?=\.)', '', Path(hero).name)
+        self.hero = re.sub(r'-\d+x\d+$', '', Path(hero).stem)
         owner = self
         class Handler(MediaRangeHandler):
             def log_message(self, *_args): pass
@@ -46,7 +46,8 @@ class Server:
             def do_GET(self):
                 path = urlsplit(self.path).path
                 owner.requests.append((time.monotonic(), path))
-                if re.sub(r'-\d+x\d+(?=\.)', '', Path(path).name) == owner.hero:
+                candidate = re.sub(r'-\d+x\d+$', '', Path(path).stem)
+                if candidate == owner.hero:
                     owner.hero_requested.set()
                     if owner.fail_hero:
                         self.failed = True
@@ -103,7 +104,7 @@ async def exercise(browser, name, mobile, output, base=None):
         assert snapshot['policy'] == 'first-screens-lazy'
         ids = snapshot['startupIds']
         images = [i[6:] for i in ids if i.startswith('image:')]
-        assert len(images) == 6, f'Home startup image inventory expanded: {images}'
+        assert len(images) == 2, f'Home startup image inventory expanded: {images}'
         assert not any(i.startswith('video:') for i in ids)
         assert not [url for _, kind, url in requests if kind == 'media'], 'Home requested videos before entry'
         result['startup_tasks'] = len(ids)
@@ -116,7 +117,7 @@ async def exercise(browser, name, mobile, output, base=None):
         assert not any(portrait_tail in url for _,_,url in requests), 'Offscreen album tail was speculatively downloaded'
         assert not any('/media/video/' in url for _,_,url in requests), 'Home background preloaded whole videos'
         result['remaining_native_lazy_home_images'] = await page.locator('#home-main .picture-section img[loading=lazy]').count()
-        result['checks'].append('Six core images only; no full-site, zoom or video gate, no background album tails')
+        result['checks'].append('Current Home screen only; no unrelated route, zoom or video startup gate, no background album tails')
 
         for route in ('portraits','projects','brands'):
             if urlsplit(page.url).path.rstrip('/') != '/works':
