@@ -54,12 +54,10 @@ const wholeSite = () => allRoutes.flatMap(path => [...screenPlan(path), ...(main
 export function prepareStartup(_path: string, retry = false): ResourceWork {
   const core = ['/', '/works', '/contacts'].flatMap(path => screenPlan(path))
   const all = wholeSite()
-  // Page-size variants are decoded now. Largest variants are also downloaded, so
-  // zooming and rotating do not introduce transfers; avoid decoding all zoom files.
+  // Decode page-sized variants, but do not simultaneously decode all zoom images.
   const additional = [...new Set([
     ...fullscreenImages.map(resolveAsset),
     ...all.map(spec => imageCandidates(spec).slice(-1)[0]?.url || resolveAsset(spec.src)),
-    // PhotoSwipe uses responsive srcsets on Home; warm every offered Home variant.
     ...mainPlans['/'].flatMap(spec => imageCandidates(spec).map(item => item.url)),
   ])]
   const viewer = 'code:photo-viewer'
@@ -69,24 +67,19 @@ export function prepareStartup(_path: string, retry = false): ResourceWork {
     ...allRoutes.map(path => codeTask(path, retry)),
     { id: viewer, promise: resources.request(viewer, () => bounded(
       Promise.all([import('photoswipe/lightbox'), import('photoswipe')]).then(() => undefined), viewer), 0, { retry }) },
-    { id: fonts, promise: resources.request(fonts, () => bounded(Promise.all([
-      document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
-      document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
-      document.fonts.load('400 16px "Font Awesome 5 Brands"', '\uf2c6\uf16d\uf189\uf167'),
-    ]).then(() => document.fonts.ready), fonts).then(() => undefined), 0, { retry }) },
+    // FontFaceSet.ready alone covers only fonts USED on the current page. Explicitly
+    // load every declared face, including the light/solid icons used on other routes.
+    { id: fonts, promise: resources.request(fonts, () => bounded(
+      Promise.all(Array.from(document.fonts, face => face.load())).then(() => document.fonts.ready),
+      fonts).then(() => undefined), 0, { retry }) },
     ...imageWork(all, 2, true, retry),
     ...additional.map(url => ({ id: imageTaskId(url), promise: requestImage(url, 4, false, retry) })),
     ...coverVideos.map(src => ({ id: `video:${resolveAsset(src)}`, promise: requestVideo(src, 6, retry) })),
   ])
 }
-
-// No navigation-level readiness barrier or popup: everything was prepared on entry.
-// An explicitly chosen partial startup remains usable, with native image fallbacks.
+// No navigation-level barrier or popup. Explicit partial startup uses native fallbacks.
 export function prepareNavigation(_path: string, _signal: AbortSignal) { return null }
-
-// Diagnostics are read-only and describe actual work, not a synthetic progress timer.
 Object.defineProperty(window, '__portfolioLoading', { configurable: true, get: () => ({
-  phase: initialPhase,
-  policy: 'single-startup',
+  phase: initialPhase, policy: 'single-startup',
   tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
 }) })

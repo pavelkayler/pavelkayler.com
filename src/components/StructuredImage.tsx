@@ -19,14 +19,12 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
   const src = imageUrl({ ...image, sizes })
   const prepared = imageIsPrepared(src)
   const shown = prepared || displayedSrc === src
-
   const reveal = () => {
     const node = imageRef.current
     if (!node) return
     const expected = node.src
     void node.decode().then(() => {
       if (imageRef.current !== node || node.src !== expected || !node.naturalWidth) return
-      // Preserve local readiness when another route releases its preload handles.
       containerRef.current?.classList.add('is-loaded', 'is-prepared')
       setDisplayedSrc(src)
     }).catch(() => undefined)
@@ -36,7 +34,6 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
     if (node?.complete && node.naturalWidth > 0) reveal()
     else if (node?.complete && prepared) node.src = src
   }, [src, prepared])
-
   return (
     <div ref={containerRef} className={`lazy-image js-lazy-image${shown ? ' is-loaded is-prepared' : ''}`}
       data-role="lazy-image" data-width={image.width} data-height={image.height} data-aspect={image.aspect}>
@@ -45,7 +42,7 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
       <img ref={imageRef} alt={image.alt} src={src} sizes={sizes}
         width={image.width} height={image.height}
         loading={shown || imageIsDownloaded(src) ? 'eager' : loading}
-        decoding="async" fetchPriority={fetchPriority} onLoad={reveal}
+        decoding={shown ? 'sync' : 'async'} fetchPriority={fetchPriority} onLoad={reveal}
         onError={() => setDisplayedSrc('')} />
     </div>
   )
