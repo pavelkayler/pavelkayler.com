@@ -58,7 +58,7 @@ export function prepareStartup(_path: string, retry = false): ResourceWork {
   // zooming and rotating do not introduce transfers; avoid decoding all zoom files.
   const additional = [...new Set([
     ...fullscreenImages.map(resolveAsset),
-    ...all.map(spec => imageCandidates(spec).at(-1)?.url || resolveAsset(spec.src)),
+    ...all.map(spec => imageCandidates(spec).slice(-1)[0]?.url || resolveAsset(spec.src)),
     // PhotoSwipe uses responsive srcsets on Home; warm every offered Home variant.
     ...mainPlans['/'].flatMap(spec => imageCandidates(spec).map(item => item.url)),
   ])]
