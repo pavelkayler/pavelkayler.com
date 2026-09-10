@@ -1,19 +1,32 @@
-# Loading and image readiness
+# One startup, no route loading screens
 
-## Initial entry
+The initial anonymous percentage loader is the only loading screen. Home, Works
+and Contacts receive priority 0. All other page-sized photographs and route code,
+then full viewer photographs and cover-video bytes are part of the SAME gate.
+There is no automatic timeout that silently exposes an incomplete site. Explicit
+retry/partial-site controls remain for failures or very long waits. Partial entry
+is deliberately degraded and cannot promise prepared photographs.
 
-The existing primary set has priority: all five Home hero slides, eight Home photos, category cards, Works, Contacts, logo, fonts and route/viewer code. A direct album URL additionally waits for every display-sized image of that selected album. Other albums, zoom files and complete videos do not delay initial entry to Home.
+All display-sized image handles are retained for this document's lifetime. Zoom
+variants retain downloaded native handles but are not all decoded at once. Video
+files are downloaded once into Blob URLs to avoid later HTTP Range downloads.
+All page-size selections and the largest responsive variants are warmed; Home
+viewer srcset candidates are warmed too. Resizing prefers resident variants.
 
-## Navigation
+Navigation has no resource loader, mask, toast or progress screen. Route code is
+already imported. Pages use the portable CSS fade rather than the native snapshot
+View Transition API that timed out on WebKit. Source images, layouts, photo quality,
+DNS and hosting are unchanged. Archives are not part of the resource plan.
 
-`preparePage` waits for all display-sized photos, cover poster and related cards, not just the first six. `prepareScreen` is for speculative first-screen warming only. A selected destination promotes its work in the shared queue. Pending navigation uses the anonymous fullscreen ring and resource percentage; unchanged fast-path behavior avoids an intentional spinner delay.
+This prioritizes uninterrupted browsing over first-entry latency and transfers
+more data initially, including full video/zoom resources. No Service Worker or
+persistent offline installation is added. A full reload/new tab starts a new gate,
+using the ordinary browser cache when available. Browser/GPU memory pressure is
+not under application control; physical devices still need real-world testing.
 
-Preloader and rendered images use the same viewport/DPR URL selection. Native decoded image handles are retained for at most 32 core images plus the selected page's display URLs. Switching pages releases the previous album's handles. A historical task-ready flag alone is not treated as decoded readiness after release. This is not permanent storage and does not pin all zoom/original files.
-
-After mounting, `usePageImagesReady` checks actual image completion before exposing the page and covers asynchronous decode work with the same loader. Initial entry uses the same mounted-image decoder. The decoder includes offscreen photographs; readiness cannot depend on scrolling. Explicit error/long-wait partial-entry controls are preserved and never count missing files as ready.
-
-## Regression coverage
-
-`album-readiness-smoke.py` holds the final album image while the first six can load, then requires all mounted photos to be complete/visible when the mask disappears. It immediately jumps through the album to its end and checks there are no new display-image HTTP requests. It covers Portraits, Projects and Brands, direct Portraits entry, Back restoration and a final-image failure/retry in Chromium and mobile WebKit emulation. Existing primary-page/preload/cache/lightbox/HTTPS checks remain enabled.
-
-Full-resolution zoom images and video streams remain a separate background tier. Memory-pressure eviction, physical-device rendering and uninterrupted video playback cannot be guaranteed by browser emulation.
+`startup-all-smoke.py` holds a final album photograph past five seconds on three
+cold browser configurations, verifies ALL planned tasks before reveal, then takes
+the context offline and browses every page, whole albums, zoom images and video.
+It checks zero route loader mounts, no late/failed transfers, priority/retry/partial
+entry and Back. It replaces tests whose premise was the old per-route loader.
+The general gallery/UI, stylesheet-cache and full-album scroll suites still run.

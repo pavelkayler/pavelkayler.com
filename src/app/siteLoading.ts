@@ -1,13 +1,11 @@
-import { allRoutes, albumPlan, coverVideos, fullscreenImages, mainPlans, normalizeRoute,
-  routeName, screenPlan, startupPlan } from '../content/loading-plan'
-import { imageTaskId, imageUrl, requestImage, requestVideo, resources, resolveAsset,
-  retainPageImages, subscribeViewport, waitAbortable, type ImageSpec } from './imageResources'
+import { allRoutes, albumPlan, coverVideos, fullscreenImages, mainPlans, screenPlan,
+  normalizeRoute } from '../content/loading-plan'
+import { imageCandidates, imageTaskId, imageUrl, requestImage, requestVideo, resources,
+  resolveAsset, useResidentImageSelection, type ImageSpec } from './imageResources'
 import { preloadRouteModule } from './routeModules'
 
 export type InitialPhase = 'loading' | 'ready' | 'degraded'
 let initialPhase: InitialPhase = 'loading'
-let partialPage: string | null = null
-export const pageMayBePartial = (path: string) => partialPage === normalizeRoute(path)
 const phaseListeners = new Set<() => void>()
 export const getInitialPhase = () => initialPhase
 export const subscribeInitialPhase = (listener: () => void) => {
@@ -16,7 +14,7 @@ export const subscribeInitialPhase = (listener: () => void) => {
 }
 export function finishInitialLoading(phase: 'ready' | 'degraded') {
   initialPhase = phase
-  partialPage = phase === 'degraded' ? currentSiteRoute() : null
+  if (phase === 'ready') useResidentImageSelection()
   document.documentElement.dataset.siteLoadState = phase
   for (const listener of phaseListeners) listener()
 }
@@ -25,171 +23,70 @@ export function currentSiteRoute() {
   const path = window.location.pathname
   return normalizeRoute(base && path.startsWith(`${base}/`) ? path.slice(base.length) : path)
 }
-
 async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
   let timer: number | undefined
   try {
     return await Promise.race([promise, new Promise<T>((_, reject) => {
-      timer = window.setTimeout(() => reject(new Error(`Resource timed out: ${label}`)), 60000)
+      timer = window.setTimeout(() => reject(new Error(`Resource timed out: ${label}`)), 120000)
     })])
   } finally { window.clearTimeout(timer) }
 }
-function codeTask(path: string, priority: number, retry: boolean) {
-  const id = `code:${path}`
-  return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), priority, { retry }) }
-}
-function viewerTask(priority: number, retry: boolean) {
-  const id = 'code:photo-viewer'
-  return { id, promise: resources.request(id, async () => {
-    await bounded(Promise.all([import('photoswipe/lightbox'), import('photoswipe')]), id)
-  }, priority, { retry }) }
-}
-function fontTask(retry: boolean) {
-  const id = 'fonts:site'
-  return { id, promise: resources.request(id, async () => {
-    await bounded(Promise.all([
-      document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
-      document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
-      document.fonts.load('400 16px "Font Awesome 5 Brands"', '\uf2c6\uf16d\uf189\uf167'),
-    ]).then(() => document.fonts.ready), id)
-  }, 0, { retry }) }
-}
-
 export interface ResourceWork { ids: string[]; finished: Promise<boolean> }
-function imageWork(specs: ImageSpec[], priority: number, decode: boolean, retry: boolean) {
-  return [...new Set(specs.map(imageUrl))].map(url => ({
-    id: imageTaskId(url), promise: requestImage(url, priority, decode, retry),
-  }))
-}
 function work(tasks: { id: string; promise: Promise<void> }[]): ResourceWork {
   return { ids: [...new Set(tasks.map(task => task.id))],
     finished: Promise.allSettled(tasks.map(task => task.promise)).then(results => results.every(r => r.status === 'fulfilled')) }
+}
+function imageWork(specs: ImageSpec[], priority: number, decode: boolean, retry: boolean) {
+  return [...new Set(specs.map(imageUrl))].map(url => ({ id: imageTaskId(url),
+    promise: requestImage(url, priority, decode, retry) }))
 }
 export function resourceProgress(ids: string[]) {
   return { total: ids.length, ready: ids.filter(id => resources.get(id)?.state === 'ready').length,
     failed: ids.filter(id => resources.get(id)?.state === 'error').length }
 }
-function pagePlan(path: string): ImageSpec[] {
-  // Include every page-sized photograph and related card; never zoom files/videos.
-  return [...screenPlan(path), ...(mainPlans[path] || albumPlan(path))]
+function codeTask(path: string, retry: boolean) {
+  const id = `code:${path}`
+  return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), 0, { retry }) }
 }
-export function prepareStartup(path: string, retry = false): ResourceWork {
-  path = normalizeRoute(path)
-  const routes = [...new Set(['/', '/works', '/contacts', path].filter(route => allRoutes.includes(route)))]
-  retainPageImages(pagePlan(path).map(imageUrl))
-  return work([...imageWork(startupPlan(path), 0, true, retry),
-    ...routes.map(route => codeTask(route, 0, retry)), viewerTask(0, retry), fontTask(retry),
-    // Direct album URLs also wait for the complete selected page. Core resources
-    // retain first priority; unrelated albums remain background-only after reveal.
-    ...imageWork(pagePlan(path), 1, true, retry)])
-}
-export function prepareScreen(path: string, priority = 20, retry = false): ResourceWork {
-  return work([...imageWork(screenPlan(path), priority, false, retry),
-    codeTask(path, priority, retry),
-    ...(path === '/' || !mainPlans[path] ? [viewerTask(priority, retry)] : [])])
-}
-export function preparePage(path: string, priority = 0, retry = false): ResourceWork {
-  path = normalizeRoute(path)
-  const images = pagePlan(path)
-  retainPageImages(images.map(imageUrl))
-  return work([...imageWork(images, priority, true, retry), codeTask(path, priority, retry),
-    ...(path === '/' || !mainPlans[path] ? [viewerTask(priority, retry)] : [])])
+const wholeSite = () => allRoutes.flatMap(path => [...screenPlan(path), ...(mainPlans[path] || albumPlan(path))])
+
+/** The one and only loading gate: every visitor-facing page, viewer and video. */
+export function prepareStartup(_path: string, retry = false): ResourceWork {
+  const core = ['/', '/works', '/contacts'].flatMap(path => screenPlan(path))
+  const all = wholeSite()
+  // Page-size variants are decoded now. Largest variants are also downloaded, so
+  // zooming and rotating do not introduce transfers; avoid decoding all zoom files.
+  const additional = [...new Set([
+    ...fullscreenImages.map(resolveAsset),
+    ...all.map(spec => imageCandidates(spec).at(-1)?.url || resolveAsset(spec.src)),
+    // PhotoSwipe uses responsive srcsets on Home; warm every offered Home variant.
+    ...mainPlans['/'].flatMap(spec => imageCandidates(spec).map(item => item.url)),
+  ])]
+  const viewer = 'code:photo-viewer'
+  const fonts = 'fonts:site'
+  return work([
+    ...imageWork(core, 0, true, retry),
+    ...allRoutes.map(path => codeTask(path, retry)),
+    { id: viewer, promise: resources.request(viewer, () => bounded(
+      Promise.all([import('photoswipe/lightbox'), import('photoswipe')]).then(() => undefined), viewer), 0, { retry }) },
+    { id: fonts, promise: resources.request(fonts, () => bounded(Promise.all([
+      document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
+      document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
+      document.fonts.load('400 16px "Font Awesome 5 Brands"', '\uf2c6\uf16d\uf189\uf167'),
+    ]).then(() => document.fonts.ready), fonts).then(() => undefined), 0, { retry }) },
+    ...imageWork(all, 2, true, retry),
+    ...additional.map(url => ({ id: imageTaskId(url), promise: requestImage(url, 4, false, retry) })),
+    ...coverVideos.map(src => ({ id: `video:${resolveAsset(src)}`, promise: requestVideo(src, 6, retry) })),
+  ])
 }
 
-let backgroundStarted = false
-function pauseBackground() {
-  resources.setBackgroundPaused(document.hidden || !navigator.onLine)
-}
-function queueBackground() {
-  for (const path of allRoutes) prepareScreen(path, 20)
-  for (const path of allRoutes) imageWork(mainPlans[path] || albumPlan(path), 30, false, false)
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
-  if (!connection?.saveData) {
-    for (const src of fullscreenImages) void requestImage(resolveAsset(src), 40).catch(() => undefined)
-    for (const src of coverVideos) void requestVideo(resolveAsset(src), 50).catch(() => undefined)
-  }
-}
-export function startSiteWarmup() {
-  if (backgroundStarted) return
-  backgroundStarted = true
-  pauseBackground()
-  document.addEventListener('visibilitychange', pauseBackground)
-  window.addEventListener('offline', pauseBackground)
-  window.addEventListener('online', () => {
-    pauseBackground()
-    for (const task of resources.all()) {
-      if (task.state === 'error') void resources.request(task.id, task.operation, task.priority, { retry: true })
-    }
-  })
-  subscribeViewport(() => {
-    preparePage(currentSiteRoute(), 5)
-    queueBackground()
-  })
-  queueBackground()
-}
+// No navigation-level readiness barrier or popup: everything was prepared on entry.
+// An explicitly chosen partial startup remains usable, with native image fallbacks.
+export function prepareNavigation(_path: string, _signal: AbortSignal) { return null }
 
-export interface NavigationStatus {
-  path: string
-  label: string
-  ready: number
-  total: number
-  failed: number
-  slow: boolean
-}
-let navigation: NavigationStatus | null = null
-let recovery: ((action: 'retry' | 'continue') => void) | undefined
-const navigationListeners = new Set<() => void>()
-let generation = 0
-export const getNavigationStatus = () => navigation
-export const subscribeNavigation = (listener: () => void) => {
-  navigationListeners.add(listener)
-  return () => { navigationListeners.delete(listener) }
-}
-export const recoverNavigation = (action: 'retry' | 'continue') => recovery?.(action)
-function publishNavigation(value: NavigationStatus | null) {
-  navigation = value
-  for (const listener of navigationListeners) listener()
-}
-
-/** Keep the current route until the ENTIRE destination's display images decode. */
-export async function prepareNavigation(path: string, signal: AbortSignal) {
-  if (initialPhase === 'loading') return null
-  path = normalizeRoute(path)
-  partialPage = null
-  const token = ++generation
-  let slow = false
-  let current: ResourceWork | undefined
-  const update = () => {
-    if (token !== generation || !current) return
-    publishNavigation({ path, label: routeName(path), ...resourceProgress(current.ids), slow })
-  }
-  const unsubscribe = resources.subscribe(update)
-  const timer = window.setTimeout(() => { slow = true; update() }, 10000)
-  try {
-    let retry = false
-    while (!signal.aborted) {
-      const viewport = `${window.innerWidth}:${window.devicePixelRatio}`
-      const action = new Promise<'retry' | 'continue'>(resolve => { recovery = resolve })
-      current = preparePage(path, 0, retry)
-      update()
-      const result = await waitAbortable(Promise.race([current.finished, action]), signal)
-      if (result === true) {
-        if (viewport !== `${window.innerWidth}:${window.devicePixelRatio}`) { retry = false; continue }
-        return null
-      }
-      const choice = result === false ? await waitAbortable(action, signal) : result
-      if (choice === 'continue') { partialPage = path; return null }
-      retry = true
-    }
-    throw new DOMException('Navigation superseded', 'AbortError')
-  } finally {
-    unsubscribe()
-    window.clearTimeout(timer)
-    if (token === generation) { recovery = undefined; publishNavigation(null) }
-  }
-}
-
+// Diagnostics are read-only and describe actual work, not a synthetic progress timer.
 Object.defineProperty(window, '__portfolioLoading', { configurable: true, get: () => ({
   phase: initialPhase,
+  policy: 'single-startup',
   tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
 }) })

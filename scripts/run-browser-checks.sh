@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test a local production build with a real static file server (no SPA fallback).
+# Real production bytes and browser caches. Fail on every required suite.
 set -euo pipefail
 PORT=4173
 LOG_DIR="${RUNNER_TEMP:-/tmp}"
@@ -13,7 +13,8 @@ for attempt in $(seq 1 30); do
 done
 node --experimental-strip-types --test scripts/resource-queue.test.ts scripts/loading-progress.test.ts
 python3 scripts/cache-smoke.py
-python3 scripts/preload-smoke.py
-python3 scripts/album-readiness-smoke.py
+# Replaces staged/route-loader assertions with the newly requested all-site gate.
+# Shared complete-photo assertions and all existing viewer/UI scenarios remain.
+python3 scripts/startup-all-smoke.py
 python3 scripts/album-scroll-smoke.py --base "http://127.0.0.1:$PORT"
 QA_WEBKIT=1 python3 scripts/browser-smoke.py --base "http://127.0.0.1:$PORT"
