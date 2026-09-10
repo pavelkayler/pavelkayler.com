@@ -22,11 +22,13 @@ export function screenPlan(path: string): ImageSpec[] {
   if (path === '/contacts') return [logoSpec, { ...contactsContent.image, sizes: MAIN_IMAGE_SIZES }]
   const album = albums[path as keyof typeof albums]
   if (!album) return [logoSpec]
-  // A bounded first-screen sample, including landscape/large viewports. The actual
-  // visible entry images are also checked before the initial loader disappears.
+  // Prime the first row only. The rendered first-screen check promotes any additional
+  // partially visible Masonry images before the startup mask disappears.
   return [logoSpec, ...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
-    ...album.photos.slice(0, 6).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))]
+    ...album.photos.slice(0, 3).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))]
 }
 export function startupPlan(path: string): ImageSpec[] {
-  return [...screenPlan('/'), ...screenPlan('/works'), ...screenPlan('/contacts'), ...screenPlan(path)]
+  // Do not make entry to one page depend on assets from unrelated routes. Their first
+  // screens are warmed shortly after reveal by scheduleSiteWarmup().
+  return screenPlan(path)
 }
