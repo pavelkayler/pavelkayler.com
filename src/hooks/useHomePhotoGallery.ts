@@ -26,7 +26,9 @@ export function useHomePhotoGallery() {
       if (lightbox) return Promise.resolve(lightbox)
       if (initialization) return initialization
 
-      // Startup warms both modules; retain local binding and opt-out recovery.
+      // Keep PhotoSwipe off the startup-critical path and load both viewer modules on
+      // the first explicit photo interaction. The click recovery below keeps the link
+      // usable if either chunk is unavailable.
       initialization = Promise.all([
         import('photoswipe/lightbox'),
         import('photoswipe'),

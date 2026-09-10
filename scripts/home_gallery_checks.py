@@ -96,8 +96,7 @@ async def _check_home_gallery(page, browser, base, screenshot, swipe_next,
     await scroller.evaluate('(el) => { el.scrollTop = 0; }')
     completed('home: category navigation unchanged; viewer reinitializes after Back')
 
-    # Keep the real Service Worker enabled. WebKit can bypass context.route for
-    # controlled requests; delay the actual HTTP response instead of skipping proof.
+    # Delay the real module response rather than relying on Playwright request routing.
     cold_origin = DelayedModuleOrigin(base, delay=2)
     cold = await browser.new_context(viewport={'width':width,'height':height},
                                     is_mobile=mobile, has_touch=mobile)
@@ -121,7 +120,7 @@ async def _check_home_gallery(page, browser, base, screenshot, swipe_next,
     finally:
         await cold.close()
         cold_origin.close()
-    completed('home: startup waits for HTTP-delayed PhotoSwipe; first click opens the selected photo')
+    completed('home: first click survives HTTP-delayed PhotoSwipe and opens the selected photo')
 
     leaving_origin = DelayedModuleOrigin(base, hold=True)
     leaving = await browser.new_context(viewport={'width':width,'height':height},
@@ -132,14 +131,17 @@ async def _check_home_gallery(page, browser, base, screenshot, swipe_next,
     p.on('pageerror', lambda error: leaving_errors.append(str(error)))
     try:
         await p.goto(leaving_origin.base+'/', wait_until='domcontentloaded')
-        assert await asyncio.to_thread(leaving_origin.requested.wait, 30), 'Held module was never requested'
-        # Explicit recovery tests a real click during an unresolved viewer import.
-        await p.locator('#site-loader-continue').click(timeout=30000)
+        # PhotoSwipe is intentionally no longer a startup dependency. Let the current
+        # Home first screen become usable, then create a genuinely pending viewer import
+        # with the first photo click.
+        await p.wait_for_function("document.documentElement.dataset.siteLoadState === 'ready'")
+        await p.locator('#site-loader').wait_for(state='hidden')
         link = p.locator('#home-main a.home-gallery-link').first
         if mobile:
             await link.tap()
         else:
             await link.click()
+        assert await asyncio.to_thread(leaving_origin.requested.wait, 30), 'First click did not request the held viewer module'
         assert urlparse(p.url).path == '/', 'Pending viewer escaped to the JPG'
         await p.locator('.menu-list a', has_text='WORKS').click()
         await p.wait_for_url('**/works')

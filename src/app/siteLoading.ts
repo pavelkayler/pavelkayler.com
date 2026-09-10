@@ -47,14 +47,13 @@ function codeTask(path: string, priority: number, retry: boolean) {
   return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), priority, { retry }) }
 }
 let startupIds: string[] = []
-/** Only primary first screens and the entry screen block first paint. */
+/** Only the current route's first screen may block first paint. */
 export function prepareStartup(path: string, retry = false): ResourceWork {
-  const routes = [...new Set(['/', '/works', '/contacts', normalizeRoute(path)])].filter(route => allRoutes.includes(route))
-  const viewer = 'code:photo-viewer', fonts = 'fonts:site'
+  const route = normalizeRoute(path)
+  const routes = allRoutes.includes(route) ? [route] : []
+  const fonts = 'fonts:site'
   const result = work([
-    ...imageWork(startupPlan(path), 0, retry), ...routes.map(route => codeTask(route, 0, retry)),
-    { id: viewer, promise: resources.request(viewer, () => bounded(
-      Promise.all([import('photoswipe/lightbox'), import('photoswipe')]).then(() => undefined), viewer), 0, { retry }) },
+    ...imageWork(startupPlan(route), 0, retry), ...routes.map(item => codeTask(item, 0, retry)),
     { id: fonts, promise: resources.request(fonts, () => bounded(Promise.all([
       document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
       document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
