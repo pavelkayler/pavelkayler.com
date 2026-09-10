@@ -55,3 +55,4 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
         onError={() => { setFailedSrc(src); setDisplayedSrc('') }} />
     </div>
   )
+}
