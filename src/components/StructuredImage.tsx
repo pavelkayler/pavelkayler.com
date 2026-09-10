@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { StructuredImage as StructuredImageData } from '../content/types'
 import { imageIsDownloaded, imageIsPrepared, imageUrl, resources,
   subscribeViewport, viewportSnapshot } from '../app/imageResources'
@@ -13,18 +13,22 @@ interface Props {
 export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority = 'auto' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const [displayedSrc, setDisplayedSrc] = useState('')
   useSyncExternalStore(subscribeViewport, viewportSnapshot)
   useSyncExternalStore(resources.subscribe, resources.getRevision)
   const src = imageUrl({ ...image, sizes })
   const prepared = imageIsPrepared(src)
+  const shown = prepared || displayedSrc === src
 
   const reveal = () => {
     const node = imageRef.current
-    const container = containerRef.current
-    if (!node || !container) return
+    if (!node) return
     const expected = node.src
     void node.decode().then(() => {
-      if (imageRef.current === node && node.src === expected) container.classList.add('is-loaded')
+      if (imageRef.current !== node || node.src !== expected || !node.naturalWidth) return
+      // Preserve local readiness when another route releases its preload handles.
+      containerRef.current?.classList.add('is-loaded', 'is-prepared')
+      setDisplayedSrc(src)
     }).catch(() => undefined)
   }
   useLayoutEffect(() => {
@@ -34,15 +38,15 @@ export function StructuredImage({ image, sizes, loading = 'lazy', fetchPriority 
   }, [src, prepared])
 
   return (
-    <div ref={containerRef} className={`lazy-image js-lazy-image${prepared ? ' is-loaded is-prepared' : ''}`}
+    <div ref={containerRef} className={`lazy-image js-lazy-image${shown ? ' is-loaded is-prepared' : ''}`}
       data-role="lazy-image" data-width={image.width} data-height={image.height} data-aspect={image.aspect}>
       <canvas className="placeholder" width={image.placeholderWidth} height={image.placeholderHeight}
         style={{ backgroundColor: image.placeholderColor }} />
       <img ref={imageRef} alt={image.alt} src={src} sizes={sizes}
         width={image.width} height={image.height}
-        loading={prepared || imageIsDownloaded(src) ? 'eager' : loading}
+        loading={shown || imageIsDownloaded(src) ? 'eager' : loading}
         decoding="async" fetchPriority={fetchPriority} onLoad={reveal}
-        onError={() => containerRef.current?.classList.add('is-loaded')} />
+        onError={() => setDisplayedSrc('')} />
     </div>
   )
 }

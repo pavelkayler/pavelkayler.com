@@ -3,22 +3,23 @@ import { createPortal } from 'react-dom'
 import { useNavigation } from 'react-router-dom'
 import { getNavigationStatus, recoverNavigation, subscribeNavigation } from '../app/siteLoading'
 import { loadingPercent } from '../app/loadingProgress'
+import { usePageImagesReady } from '../hooks/usePageImagesReady'
 
 export function NavigationProgress() {
   const state = useSyncExternalStore(subscribeNavigation, getNavigationStatus)
   const navigation = useNavigation()
   const pending = navigation.state !== 'idle'
+  const paint = usePageImagesReady()
   const [visible, setVisible] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  // Do not flash an overlay for an already-prepared route. Once shown, keep it
-  // through the router commit, not just until the last resource promise settles.
   useEffect(() => {
     if (!pending) { setVisible(false); return }
     const timer = window.setTimeout(() => setVisible(true), 180)
     return () => window.clearTimeout(timer)
   }, [pending])
-  const show = pending && visible
+  // Paint checks run in a layout effect, before the newly mounted route is exposed.
+  const show = (pending && visible) || Boolean(paint.state)
 
   useLayoutEffect(() => {
     if (!show) return
@@ -40,8 +41,12 @@ export function NavigationProgress() {
   }, [show])
 
   if (!show) return null
-  const percentage = state ? loadingPercent(state.ready, state.total) : 100
-  const needsRecovery = Boolean(state && (state.failed > 0 || state.slow))
+  const percentage = state ? loadingPercent(state.ready, state.total) : 99
+  const status = pending ? state : paint.state
+  const failed = status?.failed ?? 0
+  const needsRecovery = failed > 0 || Boolean(status?.slow)
+  const retry = () => pending ? recoverNavigation('retry') : paint.retry()
+  const continueLoading = () => pending ? recoverNavigation('continue') : paint.continue()
   return createPortal(
     <div
       ref={overlayRef}
@@ -70,10 +75,10 @@ export function NavigationProgress() {
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>{percentage}%</span>
       </div>
       {needsRecovery && <div className="loading-recovery">
-        {state && state.failed > 0 && <p role="status">Не удалось загрузить часть файлов.</p>}
+        {failed > 0 && <p role="status">Не удалось загрузить часть файлов.</p>}
         <div className="loading-actions">
-          {state && state.failed > 0 && <button type="button" onClick={() => recoverNavigation('retry')}>Повторить загрузку</button>}
-          <button type="button" onClick={() => recoverNavigation('continue')}>Открыть доступную часть</button>
+          {failed > 0 && <button type="button" onClick={retry}>Повторить загрузку</button>}
+          <button type="button" onClick={continueLoading}>Открыть доступную часть</button>
         </div>
       </div>}
     </div>,

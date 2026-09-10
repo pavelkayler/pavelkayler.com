@@ -1,6 +1,7 @@
 import { resources } from './imageResources'
 import { currentSiteRoute, finishInitialLoading, prepareStartup, resourceProgress } from './siteLoading'
 import { loadingPercent } from './loadingProgress'
+import { decodeRenderedPage } from './pageImages'
 
 const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
 async function waitForPaintedPage() {
@@ -9,19 +10,7 @@ async function waitForPaintedPage() {
     if (performance.now() > deadline) throw new Error('Page did not mount')
     await wait(50)
   }
-  // All home images are made eager independently of scroll; internal albums only
-  // decode their eager/visible entry images, not the whole album behind the gate.
-  const images = [...document.querySelectorAll<HTMLImageElement>(
-    '#root img[loading="eager"], #root .persistent-site-logo img')]
-  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  await Promise.all(images.map(image => {
-    // A previous network error remains on an existing DOM img even when a
-    // separate preloader has retried successfully; reattach that cached URL.
-    if (image.complete && !image.naturalWidth) image.src = image.currentSrc || image.src
-    return image.decode()
-  }))
-  await document.fonts.ready
-  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  await decodeRenderedPage(undefined, true)
 }
 
 export async function dismissInitialLoader() {

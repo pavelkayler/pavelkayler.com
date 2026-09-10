@@ -14,4 +14,6 @@ done
 node --experimental-strip-types --test scripts/resource-queue.test.ts scripts/loading-progress.test.ts
 python3 scripts/cache-smoke.py
 python3 scripts/preload-smoke.py
+python3 scripts/album-readiness-smoke.py
+python3 scripts/album-scroll-smoke.py --base "http://127.0.0.1:$PORT"
 QA_WEBKIT=1 python3 scripts/browser-smoke.py --base "http://127.0.0.1:$PORT"
