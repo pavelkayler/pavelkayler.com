@@ -280,17 +280,3 @@ body {
 
 /* Cached, decoded images do not replay a placeholder fade on route mount. */
 .lazy-image.is-prepared img { transition: none !important; }
-.route-loading-status {
-  position: fixed; z-index: 9500; bottom: max(18px, env(safe-area-inset-bottom));
-  left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap;
-  align-items: center; justify-content: center; gap: 12px; width: max-content;
-  max-width: calc(100vw - 32px); padding: 12px 18px; background: rgba(25,25,25,.96);
-  border: 1px solid #555; border-radius: 6px; color: #eee; font: 14px/1.5 Arial,sans-serif;
-  animation: route-indicator-appear .2s both;
-}
-.route-loading-status .site-loader-spinner { width: 18px; height: 18px; }
-.route-loading-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-.route-loading-actions button { color: inherit; background: #333; border: 1px solid #777;
-  border-radius: 4px; padding: 8px 12px; cursor: pointer; }
-@keyframes route-indicator-appear { 0%, 90% { opacity: 0; } 100% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .route-loading-status { animation: none; } }
