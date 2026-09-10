@@ -10,8 +10,6 @@ function player() {
     preparationHost = document.createElement('div')
     preparationHost.setAttribute('aria-hidden', 'true')
     preparationHost.inert = true
-    // Some media engines defer a detached player's resource selection. Attach it
-    // behind the existing opaque startup screen; never use display:none here.
     preparationHost.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;z-index:-1'
     document.body.append(preparationHost)
   }
@@ -71,8 +69,12 @@ export function requestVideo(value: string, priority: number, retry = false) {
           video.append(source)
         } else { video.src = url }
         video.load()
+        // Trigger frame preparation in engines that defer paused preload. This is
+        // muted and hidden by the startup mask; stop it immediately after readiness.
+        void video.play().catch(error => { errors.push(`${method} play: ${String(error)}`) })
         await frameReady(video, method === 'native-http')
         video.pause()
+        video.currentTime = 0
         video.remove()
         players.set(url, { element: video, bytes: blob.size, method, objectUrl })
         return
