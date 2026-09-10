@@ -1,8 +1,5 @@
-import { allRoutes, albums, albumPlan, fullscreenImages, mainPlans, screenPlan, normalizeRoute, coverVideos } from '../content/loading-plan'
-import { imageCandidates, imageTaskId, imageUrl, requestImage, resources,
-  resolveAsset, useResidentImageSelection, type ImageSpec } from './imageResources'
-import { requestVideo } from './videoResources'
-import { requestCoverPoster } from './coverPosters'
+import { allRoutes, normalizeRoute, screenPlan, startupPlan } from '../content/loading-plan'
+import { imageTaskId, imageUrl, requestImage, resources, type ImageSpec } from './imageResources'
 import { preloadRouteModule } from './routeModules'
 
 export type InitialPhase = 'loading' | 'ready' | 'degraded'
@@ -15,7 +12,6 @@ export const subscribeInitialPhase = (listener: () => void) => {
 }
 export function finishInitialLoading(phase: 'ready' | 'degraded') {
   initialPhase = phase
-  if (phase === 'ready') useResidentImageSelection()
   document.documentElement.dataset.siteLoadState = phase
   for (const listener of phaseListeners) listener()
 }
@@ -28,52 +24,54 @@ async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
   let timer: number | undefined
   try {
     return await Promise.race([promise, new Promise<T>((_, reject) => {
-      timer = window.setTimeout(() => reject(new Error(`Resource timed out: ${label}`)), 120000)
+      timer = window.setTimeout(() => reject(new Error(`Resource timed out: ${label}`)), 30000)
     })])
   } finally { window.clearTimeout(timer) }
 }
 export interface ResourceWork { ids: string[]; finished: Promise<boolean> }
+function imageWork(specs: ImageSpec[], priority: number, retry: boolean) {
+  return [...new Set(specs.map(imageUrl))].map(url => ({
+    id: imageTaskId(url), promise: requestImage(url, priority, true, retry),
+  }))
+}
 function work(tasks: { id: string; promise: Promise<void> }[]): ResourceWork {
   return { ids: [...new Set(tasks.map(task => task.id))],
     finished: Promise.allSettled(tasks.map(task => task.promise)).then(results => results.every(r => r.status === 'fulfilled')) }
-}
-function imageWork(specs: ImageSpec[], priority: number, decode: boolean, retry: boolean) {
-  return [...new Set(specs.map(imageUrl))].map(url => ({ id: imageTaskId(url), promise: requestImage(url, priority, decode, retry) }))
 }
 export function resourceProgress(ids: string[]) {
   return { total: ids.length, ready: ids.filter(id => resources.get(id)?.state === 'ready').length,
     failed: ids.filter(id => resources.get(id)?.state === 'error').length }
 }
-function codeTask(path: string, retry: boolean) {
+function codeTask(path: string, priority: number, retry: boolean) {
   const id = `code:${path}`
-  return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), 0, { retry }) }
+  return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), priority, { retry }) }
 }
-const wholeSite = () => allRoutes.flatMap(path => [...screenPlan(path), ...(mainPlans[path] || albumPlan(path))])
-
-/** One gate for the full portfolio; no work is postponed until a page click. */
-export function prepareStartup(_path: string, retry = false): ResourceWork {
-  const core = ['/', '/works', '/contacts'].flatMap(path => screenPlan(path))
-  const all = wholeSite()
-  const additional = [...new Set([
-    ...fullscreenImages.map(resolveAsset),
-    ...all.map(spec => imageCandidates(spec).slice(-1)[0]?.url || resolveAsset(spec.src)),
-    ...mainPlans['/'].flatMap(spec => imageCandidates(spec).map(item => item.url)),
-  ])]
+let startupIds: string[] = []
+/** Only primary first screens and the entry screen block first paint. */
+export function prepareStartup(path: string, retry = false): ResourceWork {
+  const routes = [...new Set(['/', '/works', '/contacts', normalizeRoute(path)])].filter(route => allRoutes.includes(route))
   const viewer = 'code:photo-viewer', fonts = 'fonts:site'
-  return work([
-    ...imageWork(core, 0, true, retry), ...allRoutes.map(path => codeTask(path, retry)),
+  const result = work([
+    ...imageWork(startupPlan(path), 0, retry), ...routes.map(route => codeTask(route, 0, retry)),
     { id: viewer, promise: resources.request(viewer, () => bounded(
       Promise.all([import('photoswipe/lightbox'), import('photoswipe')]).then(() => undefined), viewer), 0, { retry }) },
-    { id: fonts, promise: resources.request(fonts, () => bounded(
-      Promise.all(Array.from(document.fonts, face => face.load())).then(() => document.fonts.ready), fonts).then(() => undefined), 0, { retry }) },
-    ...imageWork(all, 2, true, retry),
-    ...Object.values(albums).flatMap(album => album.cover?.poster
-      ? [requestCoverPoster(album.cover.poster, 2, retry)] : []),
-    ...additional.map(url => ({ id: imageTaskId(url), promise: requestImage(url, 4, false, retry) })),
-    ...coverVideos.map(src => ({ id: `video:${resolveAsset(src)}`, promise: requestVideo(src, 6, retry) })),
+    { id: fonts, promise: resources.request(fonts, () => bounded(Promise.all([
+      document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
+      document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
+      document.fonts.load('400 16px "Font Awesome 5 Brands"', '\uf2c6\uf16d\uf189\uf167'),
+    ]).then(() => document.fonts.ready), fonts).then(() => undefined), 0, { retry }) },
   ])
+  startupIds = result.ids
+  return result
+}
+/** Optional, small screen warm-up; never enumerate whole albums/zoom/videos. */
+export function prepareScreen(path: string, priority = 20) {
+  path = normalizeRoute(path)
+  if (!allRoutes.includes(path)) return
+  return work([...imageWork(screenPlan(path), priority, false), codeTask(path, priority, false)])
 }
 export function prepareNavigation(_path: string, _signal: AbortSignal) { return null }
 Object.defineProperty(window, '__portfolioLoading', { configurable: true, get: () => ({
-  phase: initialPhase, policy: 'single-startup', tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
+  phase: initialPhase, policy: 'first-screens-lazy', startupIds: [...startupIds],
+  tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
 }) })

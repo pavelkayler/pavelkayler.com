@@ -1,43 +1,39 @@
-# One startup, no route loading screens
+# Small first-screen startup, then native lazy loading
 
-The initial anonymous percentage loader is the only loading screen. Full Home,
-Works and Contacts get first priority, then all remaining page-sized photographs,
-route/viewer code, declared fonts, full zoom photographs and complete cover-video
-bytes. Nothing automatically dismisses the gate early. Retry and explicit partial
-entry are recovery choices; partial entry does not promise ready photographs.
+The only startup screen waits for the first Home slide, the three Works cards,
+Contacts photo, logo, primary/entry route modules, viewer code and fonts actually
+used by the interface. Direct album entry also prepares its first screen. It does
+not wait for the full Home page, the rest of the slider, entire albums, zoom images
+or video files. A final check decodes only currently visible entry images. Retry
+and explicit partial entry still handle genuine first-screen errors; the timer
+does not silently report failed resources as ready.
 
-Images retain native handles for the document lifetime. Display-sized variants
-are decoded up front rather than every zoom bitmap. Largest variants and all Home
-viewer srcset candidates are downloaded too. Resizing selects resident variants.
+Each normal image has its existing responsive size and native loading=lazy unless
+it is an entry/priority image. One shared IntersectionObserver per actual scroll
+container promotes images to eager when they are within one container height below
+the viewport. Root margins update on resize. No scroll handler scans the gallery.
+The browser may request a native-lazy image earlier; the observer is not a strict
+network boundary or a promise that an arbitrary jump to the very end is instant.
 
-Video bytes are explicitly cached as complete responses before entry. A small,
-media-only Service Worker slices byte ranges out of those stored files. This is
-necessary because an ordinary warmed HTTP cache/native player still issued late
-Range requests on WebKit, while Blob sources had decoder failures. Video players
-opt into CORS mode and are prepared under the initial mask. There is no video
-transcoding added. The cache contains only the two public cover videos (~28 MB),
-not personal data. Cache keys include the readable build directory. Old versions
-are removed when there is no other portfolio tab that could need them.
+After entry, only the first screens of other sections may warm at low priority
+(two speculative queue slots). Save-Data/2G disables this optional speculation.
+There is no automatic full-album background download. The slider prepares only
+its next slide and keeps the current slide if the next cannot be fetched. Full
+viewer images are requested on opening, with PhotoSwipe's small neighbor preload.
+Video covers display a poster immediately and use native muted inline playback
+only when near the screen after startup. Reduced motion keeps the poster.
 
-The worker never intercepts HTML, scripts, photographs, ordinary video URLs or
-navigation. Only marked video URLs are handled, leaving deployment freshness and
-rollbacks independent of a cached application shell. Removing the feature from a
-future build leaves normal original URLs unaffected. Browser storage can still be
-evicted; unavailable storage exposes the startup recovery controls.
+The preload cache holds at most 32 image handles, not all source/zoom media.
+Source image quality, layouts, routing and portable CSS fades are unchanged.
+There is no route overlay and no per-route image readiness gate. Whole-page and
+all-site-offline tests were replaced with cold-entry/deferred-tail/ahead-scroll
+checks; photo viewer, navigation, stylesheet-cache and HTTPS tests remain required.
 
-Navigation has no waiting overlay, toast or resource gate. Prepared pages use a
-portable CSS fade, not native View Transition snapshots. Source media, layout,
-quality, DNS and hosting are unchanged; archived assets are excluded.
+The old video-only Service Worker is no longer registered or awaited. We unregister
+only its exact script URL asynchronously. Its compatibility file and existing
+video cache remain for older still-open tabs; no other registrations or caches
+are cleared. New playback uses original URLs and does not rely on Cache Storage.
 
-A new document/full reload starts one new gate and reuses caches when possible.
-The cold resource set is approximately 317–318 MB and is deliberately more expensive
-than staged loading. Browser/GPU memory and physical iPhone behavior still need
-real-device verification. Permanent cache residency and zero rendering time are
-not promised; this is not an offline installation of the entire site.
-
-Tests hold a final album photograph beyond five seconds, require all planned tasks
-before reveal, then disconnect Chromium and deny all new origin requests in WebKit.
-Every page, complete album, rapid scroll, zoom viewer, cover and Back must work without
-late origin transfers or route-loader mounts. Real media-range cache unit tests and
-all previous UI/viewer, stylesheet-cache and complete-album scroll suites remain
-required. QA HTTP servers implement video byte ranges as the real Pages origin does.
+An instant scrollbar jump or a very slow connection may still outrun lazy loading.
+Tests record startup file bytes and server timing as measurements, not universal
+speed promises. Physical-device memory and network conditions need separate tests.
