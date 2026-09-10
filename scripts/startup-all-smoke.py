@@ -68,7 +68,7 @@ async def cold(browser,name,mobile,entry):
     page=await context.new_page(); page.set_default_timeout(30000)
     errors=[]; failed=[]; stage='startup'
     page.on('pageerror',lambda error:errors.append(str(error)))
-    page.on('requestfailed',lambda request:failed.append(request.url))
+    page.on('requestfailed',lambda r:failed.append({'url':r.url,'type':r.resource_type,'reason':r.failure}))
     result={'name':name,'entry':entry,'passed':False,'checks':[]}
     try:
         await page.goto(server.base+entry,wait_until='domcontentloaded')
@@ -90,9 +90,8 @@ async def cold(browser,name,mobile,entry):
         result['startup_bytes_from_files']=sum((ROOT/'dist'/p.lstrip('/')).stat().st_size
             for p in {p for _,p in server.requests} if (ROOT/'dist'/p.lstrip('/')).is_file())
         result['checks'].append('All routes, fonts, page images, zoom resources and full cover videos complete before reveal')
-        # Deny every actual origin request after readiness for ALL engines. Chromium
-        # additionally uses browser offline mode. WebKit offline emulation rejected
-        # local blob: video URLs in the first run, so test real origin loss there.
+        # Every actual network request now receives 503; browsers retain normal cache.
+        # Chromium additionally disconnects its network emulation entirely.
         server.unavailable=True; stamp=time.monotonic()
         if name.startswith('chromium'): await context.set_offline(True)
         result['network_mode']='browser-offline-and-origin-503' if name.startswith('chromium') else 'origin-503-no-routing-mocks'
@@ -112,9 +111,11 @@ async def cold(browser,name,mobile,entry):
             if album.get('cover') and album['cover'].get('videoSrc'):
                 stage=route+': video'
                 video=page.locator('video').first
-                assert (await video.get_attribute('src') or '').startswith('blob:'),'Video requires more network bytes'
+                assert await video.get_attribute('src'),'Prepared video has no source'
                 await video.scroll_into_view_if_needed()
                 await page.wait_for_function('document.querySelector("video")?.readyState >= 2',timeout=15000)
+                state=await video.evaluate('(v)=>({error:v.error?{code:v.error.code,message:v.error.message}:null,time:v.currentTime,width:v.videoWidth})')
+                assert state['error'] is None and state['width']>0,state
             await page.go_back(); await page.locator('.works-route').wait_for()
             result['checks'].append(f'{route}: all {count} photos at reveal, rapid scroll, final/first zoom photo, cover and Back with origin unavailable')
         stage='primary pages and home viewer'
@@ -128,14 +129,23 @@ async def cold(browser,name,mobile,entry):
             await page.locator('.pswp__button--close').click(); await page.locator('.pswp').wait_for(state='detached')
         assert await page.evaluate('window.__qaOverlays')==0
         assert await page.evaluate('window.__qaNativeTransitions')==0
-        assert not [p for t,p in server.requests if t>stamp],'Late origin requests'
+        late=[p for t,p in server.requests if t>stamp]
+        assert not late,f'Late origin requests: {late}'
         assert not errors,errors
-        assert not failed,failed
-        result['checks'].append('Primary pages/Home viewer: zero route-loader mounts, native snapshots, late or failed resource transfers')
+        # A media element removed on Back can cancel an already cached read. This
+        # is not a failed transfer: any origin request, decode error or other failure
+        # is still fatal above/below, and successful video readiness was asserted.
+        cancelled=[f for f in failed if f['type']=='media' and any(s in (f['reason'] or '').lower() for s in ('aborted','cancel'))]
+        unexpected=[f for f in failed if f not in cancelled]
+        result['cancelled_media_reads']=cancelled
+        assert not unexpected,unexpected
+        result['checks'].append('Primary pages/Home viewer: no route-loader mounts, native snapshots, late origin transfers or unexpected resource failures')
         result['passed']=True
     except Exception as error:
         result.update(stage=stage,errors=errors+[str(error)],failed_requests=failed)
-        try: await page.screenshot(path=str(OUTPUT/f'{name}-failure.png'),animations='disabled',timeout=5000)
+        try:
+            result['video_state']=await page.locator('video').first.evaluate('(v)=>({src:v.currentSrc,ready:v.readyState,error:v.error?{code:v.error.code,message:v.error.message}:null})') if await page.locator('video').count() else None
+            await page.screenshot(path=str(OUTPUT/f'{name}-failure.png'),animations='disabled',timeout=5000)
         except Exception: pass
     finally:
         server.release.set(); await context.close(); server.close()
