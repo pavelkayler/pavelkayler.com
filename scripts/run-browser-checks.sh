@@ -10,7 +10,7 @@ for attempt in $(seq 1 30); do
   if curl --silent --fail --max-time 1 "http://127.0.0.1:$PORT/" > /dev/null; then break; fi
   sleep 1
 done
-node --experimental-strip-types --test scripts/resource-queue.test.ts scripts/loading-progress.test.ts
+node --experimental-strip-types --test scripts/resource-queue.test.ts scripts/loading-progress.test.ts scripts/video-cache.test.mjs
 python3 scripts/cache-smoke.py
 python3 scripts/startup-all-smoke.py
 python3 scripts/album-scroll-smoke.py --base "http://127.0.0.1:$PORT"

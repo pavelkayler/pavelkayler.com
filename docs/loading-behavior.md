@@ -6,27 +6,38 @@ route/viewer code, declared fonts, full zoom photographs and complete cover-vide
 bytes. Nothing automatically dismisses the gate early. Retry and explicit partial
 entry are recovery choices; partial entry does not promise ready photographs.
 
-Images retain native handles for the document lifetime. Only display-sized variants
-are decoded up front, rather than every full zoom bitmap. Largest variants and all
-Home viewer srcset candidates are downloaded too. Resize chooses resident variants.
-Video preparation retains full downloaded Blobs and usable native players. It probes
-Blob srcObject, a typed source and native HTTP without user-agent sniffing. Complete
-transfer is established by consuming the entire response; TimeRanges is not used as
-a byte-download counter. Reuse is tested with the origin unavailable. Covers reuse
-prepared players rather than creating a new decoder on each visit.
+Images retain native handles for the document lifetime. Display-sized variants
+are decoded up front rather than every zoom bitmap. Largest variants and all Home
+viewer srcset candidates are downloaded too. Resizing selects resident variants.
 
-Navigation has no waiting overlay, toast or resource gate. Prepared routes use a
-portable CSS fade, not native View Transition snapshots. No source media, layout,
-quality, DNS or hosting changes. Archives are excluded. No Service Worker is added.
-A new document/full reload starts one new gate and reuses browser caches when possible.
-The cold resource set approaches 300 MiB and is more expensive than staged loading.
-Browser/GPU memory and physical iPhone behavior need real-device verification; neither
-permanent cache residency nor zero rendering time is promised.
+Video bytes are explicitly cached as complete responses before entry. A small,
+media-only Service Worker slices byte ranges out of those stored files. This is
+necessary because an ordinary warmed HTTP cache/native player still issued late
+Range requests on WebKit, while Blob sources had decoder failures. Video players
+opt into CORS mode and are prepared under the initial mask. There is no video
+transcoding added. The cache contains only the two public cover videos (~28 MB),
+not personal data. Cache keys include the readable build directory. Old versions
+are removed when there is no other portfolio tab that could need them.
 
-Tests hold a final album photo beyond five seconds and require all planned resources
-before reveal. Chromium then disconnects its network; WebKit uses a real origin that
-returns 503 to every new request. All pages, complete albums, rapid scrolling, zoom,
-covers and Back must work with no late origin transfers and no route-loader mounts.
-Tests whose contract was a per-route spinner have been replaced, not the underlying
-all-photo assertions. UI/viewer, stylesheet-cache and album-scroll suites still gate
-publication. QA HTTP servers support video byte ranges like the real Pages origin.
+The worker never intercepts HTML, scripts, photographs, ordinary video URLs or
+navigation. Only marked video URLs are handled, leaving deployment freshness and
+rollbacks independent of a cached application shell. Removing the feature from a
+future build leaves normal original URLs unaffected. Browser storage can still be
+evicted; unavailable storage exposes the startup recovery controls.
+
+Navigation has no waiting overlay, toast or resource gate. Prepared pages use a
+portable CSS fade, not native View Transition snapshots. Source media, layout,
+quality, DNS and hosting are unchanged; archived assets are excluded.
+
+A new document/full reload starts one new gate and reuses caches when possible.
+The cold resource set is approximately 317–318 MB and is deliberately more expensive
+than staged loading. Browser/GPU memory and physical iPhone behavior still need
+real-device verification. Permanent cache residency and zero rendering time are
+not promised; this is not an offline installation of the entire site.
+
+Tests hold a final album photograph beyond five seconds, require all planned tasks
+before reveal, then disconnect Chromium and deny all new origin requests in WebKit.
+Every page, complete album, rapid scroll, zoom viewer, cover and Back must work without
+late origin transfers or route-loader mounts. Real media-range cache unit tests and
+all previous UI/viewer, stylesheet-cache and complete-album scroll suites remain
+required. QA HTTP servers implement video byte ranges as the real Pages origin does.

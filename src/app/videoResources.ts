@@ -1,98 +1,107 @@
 import { resources, resolveAsset } from './imageResources'
-interface VideoRecord { element: HTMLVideoElement; blob: Blob; bytes: number; method: string; objectUrl?: string }
+
+const CACHE_NAME = 'portfolio-video-v1'
+// The readable build directory versions only these media-cache keys. The worker
+// never caches HTML or app bundles, so a release/rollback cannot strand old code.
+const release = new URL('.', import.meta.url).pathname
+interface VideoRecord { element: HTMLVideoElement; bytes: number; method: string }
 const players = new Map<string, VideoRecord>()
-const attempts = new Map<string, string[]>()
 const key = (value: string) => new URL(resolveAsset(value), location.href).href
 export const preparedVideo = (value: string) => players.get(key(value))?.element
-let preparationHost: HTMLDivElement | undefined
-function player() {
-  if (!preparationHost) {
-    preparationHost = document.createElement('div')
-    preparationHost.setAttribute('aria-hidden', 'true')
-    preparationHost.inert = true
-    preparationHost.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;z-index:-1'
-    document.body.append(preparationHost)
+let control: Promise<void> | undefined
+let host: HTMLDivElement | undefined
+
+async function ensureVideoCache() {
+  if (!control) control = (async () => {
+    if (!('serviceWorker' in navigator) || !('caches' in window))
+      throw new Error('This browser does not provide the video cache required for complete startup')
+    const script = new URL(`${import.meta.env.BASE_URL}video-cache-worker.js`, location.href)
+    await navigator.serviceWorker.register(script, {scope: import.meta.env.BASE_URL, updateViaCache: 'none'})
+    await navigator.serviceWorker.ready
+    const isOurs = () => navigator.serviceWorker.controller &&
+      new URL(navigator.serviceWorker.controller.scriptURL).pathname === script.pathname
+    if (!isOurs()) await new Promise<void>((resolve, reject) => {
+      const changed = () => { if (isOurs()) { cleanup(); resolve() } }
+      const timer = window.setTimeout(() => { cleanup(); reject(new Error('Video cache activation timed out')) }, 30000)
+      const cleanup = () => { window.clearTimeout(timer); navigator.serviceWorker.removeEventListener('controllerchange', changed) }
+      navigator.serviceWorker.addEventListener('controllerchange', changed)
+      changed()
+    })
+    navigator.serviceWorker.controller?.postMessage({type: 'portfolio-video-trim', release})
+  })().catch(error => { control = undefined; throw error })
+  return control
+}
+function makePlayer() {
+  if (!host) {
+    host = document.createElement('div')
+    host.setAttribute('aria-hidden', 'true')
+    host.inert = true
+    host.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;z-index:-1'
+    document.body.append(host)
   }
   const video = document.createElement('video')
+  video.crossOrigin = 'anonymous'
   video.muted = video.defaultMuted = true
   video.playsInline = video.loop = true
   video.preload = 'auto'
-  preparationHost.append(video)
+  host.append(video)
   return video
 }
-function release(video: HTMLVideoElement) {
-  video.pause()
-  try { video.srcObject = null } catch { /* URL-backed player. */ }
-  video.removeAttribute('src'); video.replaceChildren(); video.load(); video.remove()
-}
-async function frameReady(video: HTMLVideoElement, sourceFailure: () => unknown) {
-  const start = performance.now()
-  for (;;) {
-    if (sourceFailure()) throw sourceFailure()
+async function waitForFrame(video: HTMLVideoElement) {
+  const until = performance.now() + 60000
+  while (video.readyState < 2 || !video.videoWidth || video.seeking) {
     if (video.error) throw new Error(`Video ${video.error.code}: ${video.error.message}`)
-    // TimeRanges is not a byte-download counter. The full response is retained
-    // separately; this check establishes an actual usable native decoder/frame.
-    if (video.readyState >= 4 && video.videoWidth > 0 && !video.seeking) return
-    if (performance.now() - start > 25000) throw new Error(`Preparation timeout (ready=${video.readyState}, duration=${video.duration})`)
+    if (performance.now() > until) throw new Error('Cached video frame preparation timed out')
     await new Promise(resolve => window.setTimeout(resolve, 50))
   }
+  if (video.error) throw new Error(video.error.message)
 }
 export function requestVideo(value: string, priority: number, retry = false) {
-  const url = key(value)
-  const idUrl = new URL(url).pathname + new URL(url).search
-  return resources.request(`video:${idUrl}`, async () => {
-    if (players.has(url)) return
-    const errors: string[] = []
-    attempts.set(url, errors)
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 180000)
-    let blob: Blob
-    try {
-      const response = await fetch(url, { signal: controller.signal, cache: 'default' })
-      if (!response.ok) throw new Error(`Video HTTP ${response.status}: ${url}`)
-      blob = await response.blob()
-      if (!blob.size) throw new Error(`Empty video: ${url}`)
-    } finally { window.clearTimeout(timeout) }
-    // Reusing a native HTTP player avoids the late Blob decoder failures observed
-    // on WebKit. Unlike the old implementation, it is created BEFORE site reveal.
-    for (const method of ['native-http', 'typed-source', 'src-object']) {
-      const video = player()
-      let objectUrl: string | undefined
-      let failure: unknown
+  const original = key(value)
+  const path = new URL(original).pathname + new URL(original).search
+  return resources.request(`video:${path}`, async () => {
+    if (players.has(original)) return
+    await ensureVideoCache()
+    const playback = new URL(original)
+    playback.searchParams.set('portfolio-video', release)
+    const cache = await caches.open(CACHE_NAME)
+    let response = await cache.match(playback.href)
+    if (!response) {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), 180000)
       try {
-        if (method === 'src-object') {
-          Reflect.set(video, 'srcObject', blob)
-        } else if (method === 'typed-source') {
-          objectUrl = URL.createObjectURL(blob)
-          const source = document.createElement('source')
-          source.type = 'video/mp4'; source.src = objectUrl
-          source.onerror = () => { failure = new Error('Typed video source was rejected') }
-          video.append(source)
-        } else { video.src = url }
-        video.load()
-        void video.play().catch(error => {
-          errors.push(`${method} play: ${String(error)}`)
-          if (!(error instanceof DOMException && error.name === 'NotAllowedError')) failure = error
-        })
-        await frameReady(video, () => failure)
-        video.pause()
-        if (video.currentTime > 0) video.currentTime = 0
-        await frameReady(video, () => failure)
-        // Keep the player attached in its invisible parking host until a cover
-        // adopts it. Do not reset its source or replace its decoder between routes.
-        players.set(url, { element: video, blob, bytes: blob.size, method, objectUrl })
-        return
-      } catch (error) {
-        errors.push(`${method}: ${String(error)}`)
-        release(video)
-        if (objectUrl) URL.revokeObjectURL(objectUrl)
-      }
+        const downloaded = await fetch(original, {signal: controller.signal, cache: 'default'})
+        if (!downloaded.ok || downloaded.status !== 200) throw new Error(`Incomplete video HTTP ${downloaded.status}`)
+        const blob = await downloaded.blob()
+        if (!blob.size) throw new Error(`Empty video: ${original}`)
+        response = new Response(blob, {headers: {
+          'Content-Type': 'video/mp4', 'Content-Length': String(blob.size),
+          'Cache-Control': 'public, max-age=31536000, immutable', 'Accept-Ranges': 'bytes',
+        }})
+        // Only complete 200 responses are stored; individual Range reads are sliced
+        // locally by the media-only worker instead of reaching the origin again.
+        await cache.put(playback.href, response.clone())
+      } finally { window.clearTimeout(timer) }
     }
-    throw new Error(`Unable to prepare ${url}: ${errors.join('; ')}`)
-  }, priority, { retry })
+    const bytes = Number(response.headers.get('Content-Length'))
+    if (!Number.isFinite(bytes) || bytes <= 0) throw new Error('Invalid complete video cache entry')
+    const video = makePlayer()
+    try {
+      video.src = playback.href
+      video.load()
+      void video.play().catch(() => undefined)
+      await waitForFrame(video)
+      video.pause()
+      if (video.currentTime > 0) video.currentTime = 0
+      await waitForFrame(video)
+      players.set(original, {element: video, bytes, method: 'range-aware-cache'})
+    } catch (error) {
+      video.pause(); video.removeAttribute('src'); video.load(); video.remove()
+      throw error
+    }
+  }, priority, {retry})
 }
-Object.defineProperty(window, '__portfolioVideoCache', { get: () => [...attempts].map(([url, errors]) => {
-  const value = players.get(url)
-  return { url, bytes: value?.bytes, method: value?.method, ready: value?.element.readyState,
-    error: value?.element.error?.message || null, attempts: [...errors] }
-}) })
+Object.defineProperty(window, '__portfolioVideoCache', {get: () => [...players].map(([url, value]) => ({
+  url, bytes: value.bytes, method: value.method, ready: value.element.readyState,
+  error: value.element.error?.message || null,
+}))})
