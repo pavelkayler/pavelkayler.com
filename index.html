@@ -42,12 +42,13 @@
     </script>
 
     <style>
+      /* Shared by the bootstrap loader and the route portal; available before JS. */
       html[data-site-loading="true"],
-      html[data-site-loading="true"] body {
-        overflow: hidden;
-      }
+      html[data-site-loading="true"] body,
+      html[data-overlay-loading="true"],
+      html[data-overlay-loading="true"] body { overflow: hidden; }
 
-      #site-loader {
+      .loading-overlay {
         position: fixed;
         inset: 0;
         z-index: 10000;
@@ -56,37 +57,38 @@
         background: #1e1e1e;
         opacity: 1;
         visibility: visible;
+        outline: none;
+        overscroll-behavior: contain;
+        touch-action: none;
         transition: opacity 360ms ease, visibility 360ms ease;
       }
-
-      .site-loader-content { display: grid; justify-items: center; gap: 18px; padding: 24px; text-align: center; color: #eee; font: 14px/1.5 Arial, sans-serif; }
-      #site-loader-progress { width: 180px; height: 3px; accent-color: #ddd; }
-      #site-loader-actions[hidden], #site-loader-retry[hidden] { display: none; }
-      #site-loader-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 400px; }
-      #site-loader-actions button { color: #eee; background: #292929; border: 1px solid #666; padding: 10px 14px; border-radius: 4px; cursor: pointer; }
-      #site-loader-actions button:disabled { opacity: .5; cursor: wait; }
-      #site-loader.is-hidden {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
+      .loading-overlay.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+      .site-loader-content {
+        display: grid; justify-items: center; gap: 18px; padding: 24px;
+        text-align: center; color: #eee; font: 14px/1.5 Arial, sans-serif;
       }
-
+      .site-loader-meter { display: grid; justify-items: center; gap: 16px; }
+      .site-loader-percentage { min-width: 4ch; line-height: 1; font-variant-numeric: tabular-nums; }
+      .loading-overlay [hidden] { display: none !important; }
+      .site-loader-error { max-width: 320px; }
+      .site-loader-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 400px; }
+      .site-loader-actions button { color: #eee; background: #292929; border: 1px solid #666; padding: 10px 14px; border-radius: 4px; cursor: pointer; }
+      .site-loader-actions button:disabled { opacity: .5; cursor: wait; }
+      .site-loader-actions button:focus-visible { outline: 2px solid #eee; outline-offset: 3px; }
       .site-loader-spinner {
-        width: 28px;
-        height: 28px;
-        box-sizing: border-box;
+        width: 28px; height: 28px; box-sizing: border-box;
         border: 2px solid rgba(255, 255, 255, 0.22);
         border-top-color: rgba(255, 255, 255, 0.92);
-        border-radius: 50%;
-        animation: site-loader-spin 720ms linear infinite;
+        border-radius: 50%; animation: site-loader-spin 720ms linear infinite;
       }
+      @keyframes site-loader-spin { to { transform: rotate(360deg); } }
 
-      @keyframes site-loader-spin {
-        to { transform: rotate(360deg); }
-      }
-
+      /* Escape the page layout and keep the mask above the logo's transition layer. */
+      #route-loader { transition-duration: 180ms; view-transition-name: loading-screen; }
+      ::view-transition-group(loading-screen) { z-index: 10001; }
+      ::view-transition-old(loading-screen), ::view-transition-new(loading-screen) { animation: none; mix-blend-mode: normal; }
       @media (prefers-reduced-motion: reduce) {
-        #site-loader { transition-duration: 0.001ms; }
+        .loading-overlay, #route-loader { transition-duration: 0.001ms; }
         .site-loader-spinner { animation: none; border-color: rgba(255, 255, 255, 0.68); }
       }
     </style>
@@ -98,12 +100,14 @@
     <link rel="stylesheet" href="%BASE_URL%assets/styles/responsive.css" />
   </head>
   <body class="theme-polina -has-cover -color-scheme -scheme-dark -accented uc-page-type-page">
-    <div id="site-loader" role="status" aria-live="polite" aria-label="Загрузка сайта">
+    <div id="site-loader" class="loading-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-label="Загрузка сайта">
       <div class="site-loader-content">
-        <span class="site-loader-spinner" aria-hidden="true"></span>
-        <span id="site-loader-label">Подготовка сайта</span>
-        <progress id="site-loader-progress" max="1" value="0" aria-label="Готовность сайта"></progress>
-        <div id="site-loader-actions" hidden>
+        <div id="site-loader-progress" class="site-loader-meter" role="progressbar" aria-label="Загрузка сайта" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="site-loader-spinner" aria-hidden="true"></span>
+          <span id="site-loader-label" class="site-loader-percentage" aria-hidden="true">0%</span>
+        </div>
+        <span id="site-loader-error" class="site-loader-error" role="alert" hidden>Не удалось загрузить часть данных.</span>
+        <div id="site-loader-actions" class="site-loader-actions" hidden>
           <button id="site-loader-retry" type="button" hidden>Повторить загрузку</button>
           <button id="site-loader-continue" type="button">Открыть доступную часть сайта</button>
         </div>

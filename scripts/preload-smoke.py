@@ -9,6 +9,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import re
 import threading
 import time
 from urllib.parse import urlsplit
@@ -20,6 +21,7 @@ class SiteServer:
     def __init__(self, failure=False):
         self.requests = []
         self.fail_photo = failure
+        self.fail_project = False
         self.hold_home = not failure
         self.hold_projects = not failure
         self.home_requested = threading.Event()
@@ -46,9 +48,12 @@ class SiteServer:
                         self.injected_failure = True
                         self.send_error(503, 'Injected image failure'); return
                     if owner.hold_home: owner.home_release.wait(35)
-                if '/projects-photo-001-' in path and owner.hold_projects:
+                if '/projects-photo-001-' in path:
                     owner.project_requested.set()
-                    owner.project_release.wait(45)
+                    if owner.fail_project:
+                        self.injected_failure = True
+                        self.send_error(503, 'Injected gallery failure'); return
+                    if owner.hold_projects: owner.project_release.wait(45)
                 try: super().do_GET()
                 except (BrokenPipeError, ConnectionResetError): pass
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(ROOT/'dist')))
@@ -62,6 +67,38 @@ class SiteServer:
 async def ready(page, phase='ready'):
     await page.wait_for_function('(phase) => document.documentElement.dataset.siteLoadState === phase', arg=phase, timeout=90000)
     await page.locator('#site-loader').wait_for(state='hidden')
+
+async def overlay_check(page, selector, recovery=False):
+    overlay = page.locator(selector)
+    await overlay.wait_for(state='visible')
+    text = (await overlay.inner_text()).strip()
+    assert 'Подготовка' not in text and not re.search(r'\d+\s+из\s+\d+', text), text
+    percent_text = (await overlay.locator('.site-loader-percentage').inner_text()).strip()
+    assert re.fullmatch(r'\d{1,3}%', percent_text), percent_text
+    percent = int(percent_text[:-1])
+    assert 0 <= percent < 100, f'Unfinished loading reported {percent}%'
+    assert int(await overlay.locator('[role=progressbar]').get_attribute('aria-valuenow')) == percent
+    if not recovery: assert text == percent_text, f'Unexpected ordinary loading text: {text}'
+    geometry = await overlay.evaluate('''el => {
+      const r=el.getBoundingClientRect(), s=getComputedStyle(el);
+      const a=el.querySelector('.site-loader-spinner').getBoundingClientRect();
+      const b=el.querySelector('.site-loader-percentage').getBoundingClientRect();
+      return {left:r.left,top:r.top,width:r.width,height:r.height,vw:innerWidth,vh:innerHeight,
+        fixed:s.position,background:s.backgroundColor,opacity:s.opacity,
+        centered:Math.abs(a.left+a.width/2-r.left-r.width/2)<2,
+        below:b.top>a.bottom,portal:el.parentElement===document.body,
+        covers:el.contains(document.elementFromPoint(innerWidth/2,20))};
+    }''')
+    assert geometry['fixed']=='fixed' and geometry['left']==0 and geometry['top']==0, geometry
+    assert geometry['width'] >= geometry['vw']-20 and geometry['height'] >= geometry['vh']-1, geometry
+    assert geometry['background']=='rgb(30, 30, 30)' and geometry['opacity']=='1', geometry
+    assert all(geometry[k] for k in ('centered','below','portal','covers')), geometry
+    assert await overlay.get_attribute('role')=='dialog'
+    assert await overlay.get_attribute('aria-modal')=='true'
+    assert await page.locator('#root').evaluate('(el) => el.inert')
+    await page.keyboard.press('Tab')
+    assert await overlay.evaluate('(el) => el.contains(document.activeElement)'), 'Focus escaped loading overlay'
+    return {'percent':percent,'geometry':geometry}
 
 async def run_cold(browser, name, mobile, dpr):
     site = SiteServer()
@@ -78,7 +115,9 @@ async def run_cold(browser, name, mobile, dpr):
         assert await page.evaluate('window.__portfolioLoading.phase') == 'loading'
         assert not any('/media/images/'+part+'/' in p for _,p in site.requests for part in ('portraits','projects','brands')), 'Background galleries competed with startup'
         assert await page.locator('.native-home-slider .slide').first.evaluate('(el) => Number(el.style.opacity)') == 1, 'Slider advanced behind startup overlay'
-        result['checks'].append('Held home photo >4.5s keeps spinner and first hero frame; gallery background has not started')
+        result['startup_overlay'] = await overlay_check(page,'#site-loader')
+        await page.screenshot(path=str(OUTPUT/f'{name}-startup-spinner.png'))
+        result['checks'].append('Held home photo >4.5s keeps the anonymous percentage spinner and first hero frame; no album competition')
         site.home_release.set(); await ready(page)
         images = await page.locator('#root img').evaluate_all('(imgs) => imgs.map(i => ({src:i.currentSrc,complete:i.complete,width:i.naturalWidth}))')
         assert images and all(i['complete'] and i['width']>0 for i in images), images
@@ -101,14 +140,22 @@ async def run_cold(browser, name, mobile, dpr):
         await page.locator('.menu-list a',has_text='WORKS').click(); await page.locator('.works-route').wait_for()
         assert await asyncio.to_thread(site.project_requested.wait,25), 'Background never reached Projects before click'
         await page.locator('.works-route a.listing-link[href$="/projects"]').click()
-        await page.wait_for_timeout(300)
-        assert urlsplit(page.url).path.rstrip('/') == '/works', 'An incomplete destination replaced the painted page'
-        assert 'Projects' in await page.locator('.route-loading-status').inner_text()
+        await page.wait_for_timeout(350)
+        assert urlsplit(page.url).path.rstrip('/') == '/works', 'An incomplete destination committed before loading'
+        result['route_overlay'] = await overlay_check(page,'#route-loader')
+        assert await page.locator('.route-loading-status').count()==0, 'The old bottom preparation toast remains'
+        await page.screenshot(path=str(OUTPUT/f'{name}-route-spinner.png'))
+        # A fullscreen modal intentionally blocks the old menu. Escape cancels the
+        # pending destination, then the user may choose another menu item normally.
+        await page.keyboard.press('Escape')
+        await page.locator('#route-loader').wait_for(state='hidden')
+        await page.wait_for_function("!document.getElementById('root').inert")
+        assert urlsplit(page.url).path.rstrip('/')=='/works'
         await page.locator('.menu-list a',has_text='CONTACTS').click()
         await page.wait_for_function("document.querySelector('.menu-list [aria-current=page]')?.textContent === 'CONTACTS'")
-        site.project_release.set(); await page.wait_for_timeout(300)
+        site.project_release.set(); await page.wait_for_timeout(350)
         assert urlsplit(page.url).path.rstrip('/') == '/contacts', 'Superseded Projects loader performed stale navigation'
-        result['checks'].append('Early gallery click keeps old page, promotes requested assets; newer navigation cancels the stale destination')
+        result['checks'].append('Early gallery entry shows an opaque viewport-centered percentage modal; Escape cancels without stale navigation')
         await page.wait_for_function("window.__portfolioLoading.tasks.filter(t => t.priority <= 30).every(t => t.state === 'ready')", timeout=90000)
         tasks=await page.evaluate('window.__portfolioLoading.tasks')
         previews=[t for t in tasks if t['id'].startswith('image:') and t['priority']<=30]
@@ -140,6 +187,7 @@ async def run_recovery(browser, bypass=False):
         await page.locator('#site-loader-retry').wait_for(state='visible')
         assert await page.locator('#site-loader').is_visible()
         assert await page.evaluate('window.__portfolioLoading.phase')=='loading'
+        await overlay_check(page,'#site-loader',recovery=True)
         if bypass:
             await page.locator('#site-loader-continue').click(); await ready(page,'degraded')
             tasks=await page.evaluate('window.__portfolioLoading.tasks')
@@ -157,6 +205,52 @@ async def run_recovery(browser, bypass=False):
         await context.close(); site.close()
     return result
 
+async def run_route_recovery(browser, bypass=False):
+    site=SiteServer()
+    site.hold_home=site.hold_projects=False
+    site.fail_project=True
+    context=await browser.new_context(viewport={'width':414,'height':896},is_mobile=True,has_touch=True,
+        reduced_motion='reduce')
+    page=await context.new_page(); page.set_default_timeout(30000)
+    result={'name':'route-opt-out' if bypass else 'route-failure-retry','passed':False}
+    try:
+        await page.goto(site.base+'/',wait_until='domcontentloaded'); await ready(page)
+        await page.locator('.menu-list a',has_text='WORKS').click(); await page.locator('.works-route').wait_for()
+        await page.locator('.works-route a.listing-link[href$="/projects"]').click()
+        await page.locator('#route-loader button',has_text='Повторить загрузку').wait_for(state='visible')
+        await overlay_check(page,'#route-loader',recovery=True)
+        assert await page.locator('#route-loader .site-loader-spinner').evaluate('(el)=>getComputedStyle(el).animationName')=='none'
+        await page.evaluate('''() => {
+          window.__loadingPercentSamples=[];
+          const record=()=>{const e=document.querySelector('#route-loader [role=progressbar]');
+            if(e) window.__loadingPercentSamples.push(Number(e.getAttribute('aria-valuenow')));};
+          new MutationObserver(record).observe(document.body,{subtree:true,attributes:true,childList:true}); record();
+        }''')
+        if bypass:
+            await page.locator('#route-loader button',has_text='Открыть доступную часть').click()
+        else:
+            site.fail_project=False
+            await page.locator('#route-loader button',has_text='Повторить загрузку').click()
+        await page.wait_for_function("location.pathname.replace(/\/$/,'')==='/projects'")
+        await page.locator('#route-loader').wait_for(state='hidden')
+        await page.wait_for_function("!document.getElementById('root').inert && !document.documentElement.hasAttribute('data-overlay-loading')")
+        samples=await page.evaluate('window.__loadingPercentSamples')
+        if bypass:
+            assert 100 not in samples, f'Partial entry pretended to finish: {samples}'
+            assert await page.evaluate("window.__portfolioLoading.tasks.some(t=>t.state==='error')")
+        else:
+            assert 100 in samples, f'Ready destination never completed percentage: {samples}'
+        await page.locator('.menu-list a',has_text='CONTACTS').click()
+        await page.wait_for_function("document.querySelector('.menu-list [aria-current=page]')?.textContent==='CONTACTS'")
+        result['samples']=samples; result['passed']=True
+    except Exception as error:
+        result['error']=str(error)
+        try: await page.screenshot(path=str(OUTPUT/f'{result["name"]}-failure.png'))
+        except Exception: pass
+    finally:
+        await context.close(); site.close()
+    return result
+
 async def main():
     parser=argparse.ArgumentParser(); parser.add_argument('--base'); parser.parse_args()
     OUTPUT.mkdir(parents=True,exist_ok=True); results=[]
@@ -166,8 +260,9 @@ async def main():
             try:
                 result=await run_cold(browser,name,mobile,dpr); results.append(result); print(json.dumps(result,ensure_ascii=False),flush=True)
                 if name=='chromium-desktop':
-                    for bypass in (False,True):
-                        result=await run_recovery(browser,bypass); results.append(result); print(json.dumps(result,ensure_ascii=False),flush=True)
+                    for check in (run_recovery,run_route_recovery):
+                        for bypass in (False,True):
+                            result=await check(browser,bypass); results.append(result); print(json.dumps(result,ensure_ascii=False),flush=True)
             finally: await browser.close()
     (OUTPUT/'report.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
     raise SystemExit(0 if all(item['passed'] for item in results) else 1)

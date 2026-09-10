@@ -1,5 +1,7 @@
 import { resources } from './imageResources'
 import { currentSiteRoute, finishInitialLoading, prepareStartup, resourceProgress } from './siteLoading'
+import { loadingPercent } from './loadingProgress'
+import { lockLoadingOverlay } from './loadingOverlay'
 
 const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
 async function waitForPaintedPage() {
@@ -26,11 +28,17 @@ async function waitForPaintedPage() {
 export async function dismissInitialLoader() {
   const loader = document.getElementById('site-loader')
   if (!loader) { finishInitialLoading('degraded'); return }
+  const unlock = lockLoadingOverlay(loader)
   const label = document.getElementById('site-loader-label')!
-  const progress = document.getElementById('site-loader-progress') as HTMLProgressElement
+  const progress = document.getElementById('site-loader-progress')!
+  const errorLabel = document.getElementById('site-loader-error')!
   const actions = document.getElementById('site-loader-actions')!
   const retryButton = document.getElementById('site-loader-retry') as HTMLButtonElement
   const continueButton = document.getElementById('site-loader-continue') as HTMLButtonElement
+  const showPercent = (percent: number) => {
+    label.textContent = `${percent}%`
+    progress.setAttribute('aria-valuenow', String(percent))
+  }
   let slow = false
   let domFailed = false
   let retry = false
@@ -47,11 +55,8 @@ export async function dismissInitialLoader() {
       const pending = prepareStartup(currentSiteRoute(), retry)
       const update = () => {
         const state = resourceProgress(pending.ids)
-        progress.max = Math.max(state.total, 1)
-        progress.value = state.ready
-        label.textContent = domFailed || state.failed
-          ? `Не всё удалось загрузить. Готово ${state.ready} из ${state.total}.`
-          : `Подготовка сайта · ${state.ready} из ${state.total}`
+        showPercent(loadingPercent(state.ready, state.total))
+        errorLabel.hidden = !domFailed && state.failed === 0
         actions.hidden = !slow && !domFailed && state.failed === 0
         continueButton.disabled = !document.querySelector('#root .react-route')
         retryButton.hidden = !domFailed && state.failed === 0
@@ -83,6 +88,8 @@ export async function dismissInitialLoader() {
     window.clearTimeout(slowTimer)
     disposeProgress()
     retryButton.onclick = continueButton.onclick = null
+    if (completed) showPercent(100)
+    unlock()
     document.documentElement.removeAttribute('data-site-loading')
     finishInitialLoading(completed ? 'ready' : 'degraded')
     loader.classList.add('is-hidden')
