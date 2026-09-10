@@ -10,8 +10,9 @@ does not silently report failed resources as ready.
 
 Each normal image has its existing responsive size and native loading=lazy unless
 it is an entry/priority image. One shared IntersectionObserver per actual scroll
-container promotes images to eager when they are within one container height below
-the viewport. Root margins update on resize. No scroll handler scans the gallery.
+container promotes images to eager within two container heights below the viewport:
+three screens in total (the current screen plus the next two). Root margins update
+on resize. No scroll handler scans the gallery.
 The browser may request a native-lazy image earlier; the observer is not a strict
 network boundary or a promise that an arbitrary jump to the very end is instant.
 
