@@ -4,18 +4,21 @@ import { RouterProvider } from 'react-router-dom'
 import 'photoswipe/style.css'
 import './styles/app.css'
 import { dismissInitialLoader } from './app/initialLoader'
-import { prepareVideoCache } from './app/videoResources'
+import { scheduleSiteWarmup } from './app/prefetch'
 import { router } from './app/router'
 
-async function start() {
-  // Establish the video's narrowly scoped worker BEFORE any photo preload. A
-  // controller change midway through startup separates native image-cache entries
-  // and can make the subsequent route request images that were warmed beforehand.
-  try { await prepareVideoCache() }
-  catch { /* The regular startup video task reports this via retry/partial controls. */ }
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode><RouterProvider router={router} /></StrictMode>,
-  )
-  await dismissInitialLoader()
+createRoot(document.getElementById('root')!).render(
+  <StrictMode><RouterProvider router={router} /></StrictMode>,
+)
+void dismissInitialLoader().then(() => scheduleSiteWarmup(window.location.pathname))
+
+// Retire only our previous video-only worker, without blocking startup or wiping
+// Cache Storage that a still-open old release could be playing from. New playback
+// uses normal, unmarked URLs. Existing controlled tabs can finish their work.
+if ('serviceWorker' in navigator) {
+  const oldScript = new URL(`${import.meta.env.BASE_URL}video-cache-worker.js`, location.href).href
+  void navigator.serviceWorker.getRegistrations().then(registrations => Promise.all(
+    registrations.filter(registration => [registration.active, registration.waiting, registration.installing]
+      .some(worker => worker?.scriptURL === oldScript)).map(registration => registration.unregister()),
+  )).catch(() => undefined)
 }
-void start()

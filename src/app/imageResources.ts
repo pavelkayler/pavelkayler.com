@@ -7,10 +7,9 @@ const canonical = (value: string) => {
   return url.origin === location.origin ? url.pathname + url.search : url.href
 }
 interface ResidentImage { image: HTMLImageElement; decoded: boolean }
-// Retain native handles for this document. Decode page images, not every zoom file.
+// A small cache for first-screen/slider preloads, not the entire media library.
 const residents = new Map<string, ResidentImage>()
-let residentSelection = false
-export function useResidentImageSelection() { residentSelection = true }
+const MAX_RETAINED_IMAGES = 32
 export function imageCandidates(spec: ImageSpec) {
   return (spec.srcSet || '').split(',').flatMap(part => {
     const match = part.trim().match(/^(\S+)\s+(\d+)w$/)
@@ -18,12 +17,8 @@ export function imageCandidates(spec: ImageSpec) {
   }).sort((a, b) => a.width - b.width)
 }
 export function imageUrl(spec: ImageSpec) {
-  let candidates = imageCandidates(spec)
+  const candidates = imageCandidates(spec)
   if (!candidates.length) return resolveAsset(spec.src)
-  if (residentSelection) {
-    const available = candidates.filter(item => residents.has(canonical(item.url)))
-    if (available.length) candidates = available
-  }
   let slot = window.innerWidth
   for (const size of (spec.sizes || '100vw').split(',')) {
     const match = size.trim().match(/^(?:(\(.+\))\s+)?([\d.]+)(vw|px)$/)
@@ -61,17 +56,24 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
   return new Promise<void>((resolve, reject) => {
     const image = new Image()
     demand.image = image
-    image.decoding = 'async'; image.fetchPriority = priority <= 1 ? 'high' : 'auto'
+    image.decoding = 'async'
+    image.fetchPriority = priority <= 1 ? 'high' : 'low'
     let done = false
     const finish = (error?: unknown) => {
       if (done) return
       done = true
       window.clearTimeout(timer)
-      image.onload = image.onerror = null; demand.image = undefined
+      image.onload = image.onerror = null
+      demand.image = undefined
       if (error) { image.removeAttribute('src'); reject(error) }
-      else { residents.set(url, { image, decoded: demand.decode }); resolve() }
+      else {
+        residents.delete(url)
+        residents.set(url, { image, decoded: demand.decode })
+        while (residents.size > MAX_RETAINED_IMAGES) residents.delete(residents.keys().next().value!)
+        resolve()
+      }
     }
-    const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 120000)
+    const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 30000)
     image.onerror = () => finish(new Error(`Image unavailable: ${url}`))
     image.onload = () => {
       if (!image.naturalWidth) return finish(new Error(`Empty image: ${url}`))
@@ -93,6 +95,7 @@ export function requestImage(url: string, priority: number, decode = false, retr
         const resident = residents.get(url)
         if (resident) {
           if (current.decode && !resident.decoded) { await resident.image.decode(); resident.decoded = true }
+          residents.delete(url); residents.set(url, resident)
         } else { await transferImage(url, current, resources.get(imageTaskId(url))?.priority ?? priority) }
         return
       } catch (error) {
@@ -101,15 +104,7 @@ export function requestImage(url: string, priority: number, decode = false, retr
       }
     }
   }, priority, {
-    retry, refresh: decode && !imageIsPrepared(url),
+    retry, refresh: !imageIsDownloaded(url) || (decode && !imageIsPrepared(url)),
     promote: () => { if (current.image) current.image.fetchPriority = 'high' },
-  })
-}
-export function waitAbortable<T>(promise: Promise<T>, signal: AbortSignal) {
-  return new Promise<T>((resolve, reject) => {
-    const aborted = () => reject(new DOMException('Navigation superseded', 'AbortError'))
-    if (signal.aborted) return aborted()
-    signal.addEventListener('abort', aborted, { once: true })
-    void promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted))
   })
 }
