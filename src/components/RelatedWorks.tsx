@@ -27,7 +27,6 @@ export function RelatedWorks({ cards }: { cards: WorksCard[] | readonly WorksCar
                     <Link
                       className="listing-link"
                       to={card.to}
-                      viewTransition
                       onPointerEnter={warm}
                       onFocus={warm}
                       onPointerDown={warm}

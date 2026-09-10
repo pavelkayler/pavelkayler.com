@@ -21,6 +21,19 @@ SCROLLER = """() => [...document.querySelectorAll('*')].find(el =>
 async def exercise(browser, base, output, name, mobile):
     context = await browser.new_context(viewport={'width': 414 if mobile else 1440, 'height': 896 if mobile else 1000},
                                         is_mobile=mobile, has_touch=mobile, device_scale_factor=2 if mobile else 1)
+    # Observe native calls, but do not swallow errors or stub their behavior. The
+    # site uses a CSS fade now, avoiding the observed WebKit update-callback timeout.
+    await context.add_init_script('''() => {}''')
+    await context.add_init_script('''
+      window.__qaNativeTransitions = 0;
+      if (typeof document.startViewTransition === 'function') {
+        const original = document.startViewTransition.bind(document);
+        document.startViewTransition = (...args) => {
+          window.__qaNativeTransitions += 1;
+          return original(...args);
+        };
+      }
+    ''')
     page = await context.new_page()
     page.set_default_timeout(60000)
     errors = []
@@ -36,12 +49,12 @@ async def exercise(browser, base, output, name, mobile):
             await page.locator('#route-loader').wait_for(state='hidden')
             await page.locator(f'.works-route a.listing-link[href$="/{route}"]').click()
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
-            # History updates can precede the View Transition's DOM commit.
             # Await the page container, never await individual image loads.
             await page.locator('.album-masonry').wait_for(state='visible')
             await page.locator('#route-loader').wait_for(state='hidden')
             count = len(checks.album_data(route)['photos'])
             await checks.check_whole_album(page, count)
+            assert await page.locator('.react-route').evaluate('(el) => getComputedStyle(el).animationName') == 'react-route-enter', 'Prepared route lost its CSS fade'
             scroller = await page.evaluate_handle(SCROLLER)
             for fraction in (.45, 1, .2, .9):
                 offset = await scroller.evaluate('(el, f) => { el.scrollTop=(el.scrollHeight-el.clientHeight)*f; return el.scrollTop; }', fraction)
@@ -55,6 +68,8 @@ async def exercise(browser, base, output, name, mobile):
             assert box and box['y'] < (896 if mobile else 1000) and box['y'] + box['height'] > 0, 'Final photo is not visible'
             await page.screenshot(path=str(output / f'{name}-{route}-last-photo.png'), animations='disabled')
             result['albums'].append({'route': route, 'photos_ready_at_reveal': count, 'actual_fast_scroll': True})
+        result['native_transition_calls'] = await page.evaluate('window.__qaNativeTransitions')
+        assert result['native_transition_calls'] == 0, 'Navigation reintroduced a native snapshot callback'
         assert not errors, errors
         result['passed'] = True
     except Exception as error:
