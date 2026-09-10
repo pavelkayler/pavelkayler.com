@@ -10,10 +10,21 @@ interface ResidentImage { image: HTMLImageElement; decoded: boolean }
 // A small cache for first-screen/slider preloads, not the entire media library.
 const residents = new Map<string, ResidentImage>()
 const MAX_RETAINED_IMAGES = 32
+function widthFromFilename(value: string) {
+  const clean = value.split(/[?#]/, 1)[0]
+  const match = clean.match(/-(\d+)x\d+\.[A-Za-z0-9]+$/)
+  return match ? Number(match[1]) : 0
+}
 export function imageCandidates(spec: ImageSpec) {
   return (spec.srcSet || '').split(',').flatMap(part => {
     const match = part.trim().match(/^(\S+)\s+(\d+)w$/)
-    return match ? [{ url: resolveAsset(match[1]), width: Number(match[2]) }] : []
+    if (!match) return []
+    const url = resolveAsset(match[1])
+    // The imported Wfolio descriptors were historically rounded to layout widths
+    // (600/1240/1880w), while the actual files are 640/1280/1920px. Prefer the real
+    // pixel width encoded in maintained filenames so a 640px preview is not skipped.
+    const width = widthFromFilename(url) || Number(match[2])
+    return [{ url, width }]
   }).sort((a, b) => a.width - b.width)
 }
 export function imageUrl(spec: ImageSpec) {
