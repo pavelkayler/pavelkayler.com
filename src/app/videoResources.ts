@@ -1,8 +1,5 @@
 import { resources, resolveAsset } from './imageResources'
-
 const CACHE_NAME = 'portfolio-video-v1'
-// The readable build directory versions only these media-cache keys. The worker
-// never caches HTML or app bundles, so a release/rollback cannot strand old code.
 const release = new URL('.', import.meta.url).pathname
 interface VideoRecord { element: HTMLVideoElement; bytes: number; method: string }
 const players = new Map<string, VideoRecord>()
@@ -10,32 +7,36 @@ const key = (value: string) => new URL(resolveAsset(value), location.href).href
 export const preparedVideo = (value: string) => players.get(key(value))?.element
 let control: Promise<void> | undefined
 let host: HTMLDivElement | undefined
-
-async function ensureVideoCache() {
-  if (!control) control = (async () => {
-    if (!('serviceWorker' in navigator) || !('caches' in window))
-      throw new Error('This browser does not provide the video cache required for complete startup')
-    const script = new URL(`${import.meta.env.BASE_URL}video-cache-worker.js`, location.href)
-    await navigator.serviceWorker.register(script, {scope: import.meta.env.BASE_URL, updateViaCache: 'none'})
-    await navigator.serviceWorker.ready
-    const isOurs = () => navigator.serviceWorker.controller &&
-      new URL(navigator.serviceWorker.controller.scriptURL).pathname === script.pathname
-    if (!isOurs()) await new Promise<void>((resolve, reject) => {
-      const changed = () => { if (isOurs()) { cleanup(); resolve() } }
-      const timer = window.setTimeout(() => { cleanup(); reject(new Error('Video cache activation timed out')) }, 30000)
-      const cleanup = () => { window.clearTimeout(timer); navigator.serviceWorker.removeEventListener('controllerchange', changed) }
-      navigator.serviceWorker.addEventListener('controllerchange', changed)
-      changed()
-    })
-    navigator.serviceWorker.controller?.postMessage({type: 'portfolio-video-trim', release})
-  })().catch(error => { control = undefined; throw error })
+export function prepareVideoCache(): Promise<void> {
+  if (!control) {
+    let timer: number | undefined
+    const activation = (async () => {
+      if (!('serviceWorker' in navigator) || !('caches' in window))
+        throw new Error('This browser does not provide the required complete video cache')
+      const script = new URL(`${import.meta.env.BASE_URL}video-cache-worker.js`, location.href)
+      await navigator.serviceWorker.register(script, {scope: import.meta.env.BASE_URL, updateViaCache: 'none'})
+      await navigator.serviceWorker.ready
+      const isOurs = () => navigator.serviceWorker.controller &&
+        new URL(navigator.serviceWorker.controller.scriptURL).pathname === script.pathname
+      if (!isOurs()) await new Promise<void>((resolve, reject) => {
+        const changed = () => { if (isOurs()) { cleanup(); resolve() } }
+        const timeout = window.setTimeout(() => { cleanup(); reject(new Error('Video cache control timed out')) }, 30000)
+        const cleanup = () => { window.clearTimeout(timeout); navigator.serviceWorker.removeEventListener('controllerchange', changed) }
+        navigator.serviceWorker.addEventListener('controllerchange', changed)
+        changed()
+      })
+      navigator.serviceWorker.controller?.postMessage({type: 'portfolio-video-trim', release})
+    })()
+    control = Promise.race([activation, new Promise<never>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error('Video cache activation timed out')), 30000)
+    })]).finally(() => window.clearTimeout(timer)).catch(error => { control = undefined; throw error })
+  }
   return control
 }
 function makePlayer() {
   if (!host) {
     host = document.createElement('div')
-    host.setAttribute('aria-hidden', 'true')
-    host.inert = true
+    host.setAttribute('aria-hidden', 'true'); host.inert = true
     host.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;z-index:-1'
     document.body.append(host)
   }
@@ -61,7 +62,7 @@ export function requestVideo(value: string, priority: number, retry = false) {
   const path = new URL(original).pathname + new URL(original).search
   return resources.request(`video:${path}`, async () => {
     if (players.has(original)) return
-    await ensureVideoCache()
+    await prepareVideoCache()
     const playback = new URL(original)
     playback.searchParams.set('portfolio-video', release)
     const cache = await caches.open(CACHE_NAME)
@@ -78,8 +79,6 @@ export function requestVideo(value: string, priority: number, retry = false) {
           'Content-Type': 'video/mp4', 'Content-Length': String(blob.size),
           'Cache-Control': 'public, max-age=31536000, immutable', 'Accept-Ranges': 'bytes',
         }})
-        // Only complete 200 responses are stored; individual Range reads are sliced
-        // locally by the media-only worker instead of reaching the origin again.
         await cache.put(playback.href, response.clone())
       } finally { window.clearTimeout(timer) }
     }
