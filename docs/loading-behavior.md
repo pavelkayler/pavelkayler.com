@@ -1,32 +1,31 @@
 # One startup, no route loading screens
 
-The initial anonymous percentage loader is the only loading screen. Home, Works
-and Contacts receive priority 0. All other page-sized photographs and route code,
-then full viewer photographs and cover-video bytes are part of the SAME gate.
-There is no automatic timeout that silently exposes an incomplete site. Explicit
-retry/partial-site controls remain for failures or very long waits. Partial entry
-is deliberately degraded and cannot promise prepared photographs.
+The initial anonymous percentage loader is the only loading screen. Full Home,
+Works and Contacts get first priority, then all remaining page-sized photographs,
+route/viewer code, declared fonts, full zoom photographs and complete cover-video
+bytes. Nothing automatically dismisses the gate early. Retry and explicit partial
+entry are recovery choices; partial entry does not promise ready photographs.
 
-All display-sized image handles are retained for this document's lifetime. Zoom
-variants retain downloaded native handles but are not all decoded at once. Video
-files are downloaded once into Blob URLs to avoid later HTTP Range downloads.
-All page-size selections and the largest responsive variants are warmed; Home
-viewer srcset candidates are warmed too. Resizing prefers resident variants.
+Images retain native handles for the document lifetime. Only display-sized variants
+are decoded up front, rather than every full zoom bitmap. Largest variants and all
+Home viewer srcset candidates are downloaded too. Resize chooses resident variants.
+Video preparation retains a usable native player as well as downloading full bytes.
+It probes Blob srcObject, a typed source and native HTTP without user-agent sniffing;
+the HTTP fallback must buffer the complete video before readiness. Route covers reuse
+those players rather than triggering a new media cache lookup on each visit.
 
-Navigation has no resource loader, mask, toast or progress screen. Route code is
-already imported. Pages use the portable CSS fade rather than the native snapshot
-View Transition API that timed out on WebKit. Source images, layouts, photo quality,
-DNS and hosting are unchanged. Archives are not part of the resource plan.
+Navigation has no waiting overlay, toast or resource gate. Prepared routes use a
+portable CSS fade, not native View Transition snapshots. No source media, layout,
+quality, DNS or hosting changes. Archives are excluded. No Service Worker is added.
+A new document/full reload starts one new gate and reuses browser caches when possible.
+The cold transfer currently approaches 300 MiB and is intentionally more expensive
+than staged loading. Browser/GPU memory and physical iPhone behavior need real-device
+verification; neither permanent cache residency nor zero rendering time is promised.
 
-This prioritizes uninterrupted browsing over first-entry latency and transfers
-more data initially, including full video/zoom resources. No Service Worker or
-persistent offline installation is added. A full reload/new tab starts a new gate,
-using the ordinary browser cache when available. Browser/GPU memory pressure is
-not under application control; physical devices still need real-world testing.
-
-`startup-all-smoke.py` holds a final album photograph past five seconds on three
-cold browser configurations, verifies ALL planned tasks before reveal, then takes
-the context offline and browses every page, whole albums, zoom images and video.
-It checks zero route loader mounts, no late/failed transfers, priority/retry/partial
-entry and Back. It replaces tests whose premise was the old per-route loader.
-The general gallery/UI, stylesheet-cache and full-album scroll suites still run.
+Tests hold a final album photo beyond five seconds and require all planned resources
+before reveal. Chromium then disconnects its network; WebKit uses a real origin that
+returns 503 to every new request. All pages, complete albums, rapid scrolling, zoom,
+covers and Back must work with no late origin transfers and no route-loader mounts.
+Tests whose contract was a per-route spinner have been replaced, not the underlying
+all-photo assertions. UI/viewer, stylesheet-cache and album-scroll suites still gate
+publication. Video probes compare the same encoded files without re-encoding them.
