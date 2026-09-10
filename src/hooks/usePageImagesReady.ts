@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation } from 'react-router-dom'
 import { currentSiteRoute, getInitialPhase, pageMayBePartial } from '../app/siteLoading'
 import { subscribeViewport, viewportSnapshot } from '../app/imageResources'
@@ -12,14 +12,15 @@ export function usePageImagesReady() {
   const viewport = useSyncExternalStore(subscribeViewport, viewportSnapshot)
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<PaintState | null>(null)
+  const controllerRef = useRef<AbortController | null>(null)
 
   useLayoutEffect(() => {
-    // Startup has its own all-image decode gate; explicit partial entry must remain possible.
     if (getInitialPhase() === 'loading' || pageMayBePartial(currentSiteRoute()) || renderedPageIsReady()) {
       setState(null)
       return
     }
     const controller = new AbortController()
+    controllerRef.current = controller
     setState({ failed: 0, slow: false })
     const timer = window.setTimeout(() => {
       if (!controller.signal.aborted) setState(current => current && { ...current, slow: true })
@@ -29,8 +30,16 @@ export function usePageImagesReady() {
     }, () => {
       if (!controller.signal.aborted) setState({ failed: 1, slow: false })
     }).finally(() => window.clearTimeout(timer))
-    return () => { controller.abort(); window.clearTimeout(timer) }
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+      if (controllerRef.current === controller) controllerRef.current = null
+    }
   }, [location.key, viewport, attempt])
 
-  return { state, retry: () => setAttempt(value => value + 1), continue: () => setState(null) }
+  return {
+    state,
+    retry: () => setAttempt(value => value + 1),
+    continue: () => { controllerRef.current?.abort(); setState(null) },
+  }
 }
