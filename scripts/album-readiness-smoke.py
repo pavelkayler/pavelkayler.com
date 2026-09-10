@@ -51,7 +51,6 @@ class AlbumServer:
                         self.send_error(503, 'Intentionally unavailable last album photograph')
                         return
                     owner.release.wait(60)
-                # A small real-server delay also separates otherwise instantaneous cache events.
                 if '/media/images/' in path:
                     time.sleep(0.015)
                 try:
@@ -77,7 +76,7 @@ async def startup_ready(page):
 
 
 async def check_whole_album(page, count):
-    # No wait-for-each-image: the page must ALREADY be complete when the mask leaves.
+    # No wait-for-each-image: all images must already be complete at reveal.
     images = await page.locator('.album-masonry .piece img').evaluate_all('''images => images.map(img => ({
       src: img.currentSrc, complete: img.complete, width: img.naturalWidth,
       loading: img.loading, opacity: getComputedStyle(img).opacity,
@@ -90,16 +89,21 @@ async def check_whole_album(page, count):
 
 
 async def fast_scroll(page, count):
+    scroller = await page.evaluate_handle("""() => [...document.querySelectorAll('*')].find(el =>
+      el.clientWidth > innerWidth * .7 && el.clientHeight > innerHeight * .5 &&
+      el.scrollHeight > el.clientHeight + 200 && /auto|scroll/.test(getComputedStyle(el).overflowY)
+    ) || document.scrollingElement""")
     for fraction in (0.25, 0.65, 1, 0.4, 1):
-        await page.evaluate('''fraction => {
-          const candidates = [document.scrollingElement, document.body, document.documentElement,
-            ...document.querySelectorAll('#root, .react-page-wrapper, .page-wrapper')].filter(Boolean);
-          for (const el of new Set(candidates)) {
-            if (el.scrollHeight > el.clientHeight + 10) el.scrollTop = (el.scrollHeight-el.clientHeight)*fraction;
-          }
-        }''', fraction)
+        moved = await scroller.evaluate('(el, f) => { el.scrollTop=(el.scrollHeight-el.clientHeight)*f; return el.scrollTop; }', fraction)
+        assert moved > 100, 'The fast-scroll test did not actually move the page'
         await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         await check_whole_album(page, count)
+    last = page.locator('.album-masonry .piece').last
+    await last.scroll_into_view_if_needed()
+    await check_whole_album(page, count)
+    box = await last.bounding_box()
+    viewport = page.viewport_size
+    assert box and box['y'] < viewport['height'] and box['y']+box['height'] > 0, 'The final photo is not visible'
 
 
 async def run(browser, name, route, mobile, direct=False, failure=False):
@@ -107,7 +111,7 @@ async def run(browser, name, route, mobile, direct=False, failure=False):
     context = await browser.new_context(viewport={'width': 414 if mobile else 1440, 'height': 896 if mobile else 1000},
                                         is_mobile=mobile, has_touch=mobile, device_scale_factor=2 if mobile else 1)
     page = await context.new_page()
-    page.set_default_timeout(45000)
+    page.set_default_timeout(30000)
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     case = f'{name}-{route}-' + ('direct' if direct else 'retry' if failure else 'navigation')
@@ -140,21 +144,26 @@ async def run(browser, name, route, mobile, direct=False, failure=False):
             await startup_ready(page)
         else:
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
+            await page.locator('.album-masonry').wait_for(state='visible')
             await page.locator('#route-loader').wait_for(state='hidden')
         image_paths = await check_whole_album(page, result['photos'])
         stamp = time.monotonic()
         await fast_scroll(page, result['photos'])
         assert not [p for t, p in server.requests if t > stamp and p in image_paths], 'Fast scrolling fetched missing page photographs'
         await page.screenshot(path=str(OUTPUT / f'{case}-ready-bottom.png'), animations='disabled')
-        result['checks'].append('Every mounted photo is complete and visible at reveal; immediate end/middle scrolling fetches no page images')
+        result['checks'].append('Every mounted photo is complete and visible at reveal; actual end/middle scrolling fetches no page images')
         if not direct and not failure:
             await page.locator('.menu-list a', has_text='WORKS').click()
             await page.wait_for_url(re.compile(r'/works/?$'))
+            await page.locator('.works-route').wait_for(state='visible')
             await page.go_back()
+            # POP changes the browser URL before the data-router commits its route.
+            # Wait for the album container, never wait for its individual pictures.
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
+            await page.locator('.album-masonry').wait_for(state='visible')
             await page.locator('#route-loader').wait_for(state='hidden')
             await check_whole_album(page, result['photos'])
-            result['checks'].append('Back to a deep scroll position also restores a fully prepared album')
+            result['checks'].append('Back to a deep scroll position restores a fully prepared album')
         assert not errors, errors
         result['passed'] = True
     except Exception as error:
@@ -162,6 +171,7 @@ async def run(browser, name, route, mobile, direct=False, failure=False):
         try:
             await page.screenshot(path=str(OUTPUT / f'{case}-failure.png'), animations='disabled', timeout=5000)
             result['tasks'] = await page.evaluate('window.__portfolioLoading?.tasks')
+            result['dom_images'] = await page.locator('#root img').evaluate_all('(imgs) => imgs.map(i => ({src:i.src,complete:i.complete,width:i.naturalWidth}))')
         except Exception:
             pass
     finally:
@@ -180,21 +190,20 @@ async def main():
                                      (tool.webkit, 'webkit-mobile', True)):
             browser = await engine.launch()
             try:
-                for route in ('portraits', 'projects', 'brands'):
-                    result = await run(browser, name, route, mobile)
-                    results.append(result)
-                    print(json.dumps(result, ensure_ascii=False), flush=True)
-                result = await run(browser, name, 'portraits', mobile, direct=True)
-                results.append(result)
-                print(json.dumps(result, ensure_ascii=False), flush=True)
+                cases = [(route, False, False) for route in ('portraits', 'projects', 'brands')]
+                cases += [('portraits', True, False)]
                 if name == 'chromium-desktop':
-                    result = await run(browser, name, 'portraits', mobile, failure=True)
+                    cases += [('portraits', False, True)]
+                for route, direct, failure in cases:
+                    result = await run(browser, name, route, mobile, direct, failure)
                     results.append(result)
                     print(json.dumps(result, ensure_ascii=False), flush=True)
+                    (OUTPUT / 'report.json').write_text(json.dumps(results, indent=2, ensure_ascii=False))
+                    if not result['passed']:
+                        raise SystemExit(1)
             finally:
                 await browser.close()
-    (OUTPUT / 'report.json').write_text(json.dumps(results, indent=2, ensure_ascii=False))
-    raise SystemExit(0 if all(result['passed'] for result in results) else 1)
+    raise SystemExit(0)
 
 
 if __name__ == '__main__':

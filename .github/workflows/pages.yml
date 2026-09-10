@@ -86,7 +86,9 @@ jobs:
       - name: Check published navigation and galleries
         env:
           QA_WEBKIT: 1
-        run: python3 scripts/browser-smoke.py --base https://pavelkayler.com --output test-results/live
+        run: |
+          python3 scripts/browser-smoke.py --base https://pavelkayler.com --output test-results/live
+          python3 scripts/album-scroll-smoke.py --base https://pavelkayler.com --output test-results/live/complete-albums
       - name: Save live browser evidence
         if: always()
         uses: actions/upload-artifact@v4

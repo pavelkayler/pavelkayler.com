@@ -5,37 +5,55 @@ export function renderedPageImages() {
     '#root .react-route img, #root .persistent-site-logo img')]
 }
 
-// Fast path uses live retained decode handles AND the actual mounted image state.
-// A task once marked ready is not by itself a guarantee of a painted page.
 export function renderedPageIsReady() {
   const images = renderedPageImages()
   return images.length > 0 && images.every(image => image.complete && image.naturalWidth > 0 &&
     (imageIsPrepared(image.currentSrc || image.src) || image.dataset.decodedSrc === image.src))
 }
 
+const paintFrames = () => new Promise<void>(resolve =>
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
 export async function decodeRenderedPage(signal?: AbortSignal, retry = false) {
-  const images = renderedPageImages()
-  if (!document.querySelector('#root .react-route')) throw new Error('Page has not mounted')
   let timer: number | undefined
-  const decode = Promise.all(images.map(async image => {
-    image.loading = 'eager'
-    const expected = image.src
-    if (retry && image.complete && !image.naturalWidth) {
-      image.removeAttribute('src')
-      image.src = expected
+  const settle = async () => {
+    // A view-transition commit can replace the previous route's nodes after the
+    // layout notification. Inspect the final mounted route, not an obsolete snapshot.
+    for (;;) {
+      if (signal?.aborted) throw new DOMException('Page superseded', 'AbortError')
+      await paintFrames()
+      if (!document.querySelector('#root .react-route')) throw new Error('Page has not mounted')
+      const images = renderedPageImages()
+      const sources = images.map(image => image.src)
+      const results = await Promise.allSettled(images.map(async (image, index) => {
+        image.loading = 'eager'
+        if (retry && image.complete && !image.naturalWidth) {
+          image.removeAttribute('src')
+          image.src = sources[index]
+        }
+        await image.decode()
+      }))
+      if (signal?.aborted) throw new DOMException('Page superseded', 'AbortError')
+      const current = renderedPageImages()
+      if (images.length !== current.length || images.some((image, index) =>
+        !image.isConnected || image !== current[index] || image.src !== sources[index])) continue
+      const failure = results.findIndex((result, index) => result.status === 'rejected' || !images[index].naturalWidth)
+      if (failure >= 0) {
+        const outcome = results[failure]
+        const reason = outcome.status === 'rejected' ? String(outcome.reason) : 'Empty image'
+        throw new Error(`${sources[failure]}: ${reason}`)
+      }
+      for (const image of images) {
+        image.dataset.decodedSrc = image.src
+        image.closest('[data-role="lazy-image"]')?.classList.add('is-loaded', 'is-prepared')
+      }
+      await document.fonts.ready
+      await paintFrames()
+      return
     }
-    await image.decode()
-    if (!image.isConnected || image.src !== expected || !image.naturalWidth) {
-      throw new Error('Page image changed during preparation')
-    }
-    image.dataset.decodedSrc = expected
-    image.closest('[data-role="lazy-image"]')?.classList.add('is-loaded', 'is-prepared')
-  })).then(async () => {
-    await document.fonts.ready
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  })
+  }
   try {
-    const bounded = Promise.race([decode, new Promise<never>((_, reject) => {
+    const bounded = Promise.race([settle(), new Promise<never>((_, reject) => {
       timer = window.setTimeout(() => reject(new Error('Page image preparation timed out')), 60000)
     })])
     await (signal ? waitAbortable(bounded, signal) : bounded)

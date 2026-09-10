@@ -11,6 +11,7 @@ import type { StructuredImage } from './types'
 
 export const MAIN_IMAGE_SIZES = '(max-width: 768px) 100vw, 33vw'
 export const GALLERY_IMAGE_SIZES = '(max-width: 768px) 50vw, 33vw'
+export const RELATED_IMAGE_SIZES = '(max-width: 768px) 100vw, 50vw'
 export const homePictureSpecs = homeContent.pictureRows.flatMap(row => row.columns.map(column => ({
   ...column.image, sizes: row.columns.length > 1 ? '(max-width: 768px) 100vw, 50vw' : '100vw',
 })))
@@ -35,7 +36,7 @@ export function albumPlan(path: string): ImageSpec[] {
   return [
     ...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
     ...album.photos.map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES })),
-    ...album.related.map(card => ({ ...card.image, sizes: MAIN_IMAGE_SIZES })),
+    ...album.related.map(card => ({ ...card.image, sizes: RELATED_IMAGE_SIZES })),
   ]
 }
 export function screenPlan(path: string): ImageSpec[] {
@@ -43,7 +44,6 @@ export function screenPlan(path: string): ImageSpec[] {
   if (main) return [logoSpec, ...main]
   const album = albums[path as keyof typeof albums]
   if (!album) return [logoSpec]
-  // Include the poster AND first six photos, including landscape/large viewports.
   return [logoSpec, ...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
     ...album.photos.slice(0, 6).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))]
 }
