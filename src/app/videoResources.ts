@@ -1,5 +1,5 @@
 import { resources, resolveAsset } from './imageResources'
-interface VideoRecord { element: HTMLVideoElement; bytes: number; method: string; objectUrl?: string }
+interface VideoRecord { element: HTMLVideoElement; blob: Blob; bytes: number; method: string; objectUrl?: string }
 const players = new Map<string, VideoRecord>()
 const attempts = new Map<string, string[]>()
 const key = (value: string) => new URL(resolveAsset(value), location.href).href
@@ -23,20 +23,18 @@ function player() {
 function release(video: HTMLVideoElement) {
   video.pause()
   try { video.srcObject = null } catch { /* URL-backed player. */ }
-  video.removeAttribute('src')
-  video.replaceChildren()
-  video.load()
-  video.remove()
+  video.removeAttribute('src'); video.replaceChildren(); video.load(); video.remove()
 }
-async function frameReady(video: HTMLVideoElement, requireFullBuffer: boolean, sourceFailure: () => unknown) {
+async function frameReady(video: HTMLVideoElement, nativeHttp: boolean, sourceFailure: () => unknown) {
   const start = performance.now()
   for (;;) {
     if (sourceFailure()) throw sourceFailure()
     if (video.error) throw new Error(`Video ${video.error.code}: ${video.error.message}`)
-    const buffered = !requireFullBuffer || (Number.isFinite(video.duration) && video.buffered.length > 0 &&
-      video.buffered.start(0) <= 0.1 && video.buffered.end(video.buffered.length - 1) >= video.duration - 0.1)
-    if (video.readyState >= 2 && video.videoWidth > 0 && buffered) return
-    if (performance.now() - start > 25000) throw new Error(`Preparation timeout (ready=${video.readyState}, duration=${video.duration}, buffered=${video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0})`)
+    // Full transfer is established by response.blob(), NOT by TimeRanges. WebKit
+    // reports empty buffered ranges for this short MP4 even at HAVE_ENOUGH_DATA.
+    // Retain its already-usable player and verify reuse with the origin unavailable.
+    if (video.readyState >= (nativeHttp ? 4 : 2) && video.videoWidth > 0) return
+    if (performance.now() - start > 25000) throw new Error(`Preparation timeout (ready=${video.readyState}, duration=${video.duration})`)
     await new Promise(resolve => window.setTimeout(resolve, 50))
   }
 }
@@ -66,10 +64,7 @@ export function requestVideo(value: string, priority: number, retry = false) {
         } else if (method === 'typed-source') {
           objectUrl = URL.createObjectURL(blob)
           const source = document.createElement('source')
-          source.type = 'video/mp4'
-          source.src = objectUrl
-          // A failed <source> need not set video.error. Observe it directly so
-          // a known rejection never holds the whole site's spinner for 25 seconds.
+          source.type = 'video/mp4'; source.src = objectUrl
           source.onerror = () => { failure = new Error('Typed video source was rejected') }
           video.append(source)
         } else { video.src = url }
@@ -79,10 +74,8 @@ export function requestVideo(value: string, priority: number, retry = false) {
           if (!(error instanceof DOMException && error.name === 'NotAllowedError')) failure = error
         })
         await frameReady(video, method === 'native-http', () => failure)
-        video.pause()
-        video.currentTime = 0
-        video.remove()
-        players.set(url, { element: video, bytes: blob.size, method, objectUrl })
+        video.pause(); video.currentTime = 0; video.remove()
+        players.set(url, { element: video, blob, bytes: blob.size, method, objectUrl })
         return
       } catch (error) {
         errors.push(`${method}: ${String(error)}`)

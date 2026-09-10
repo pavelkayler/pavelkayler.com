@@ -1,5 +1,4 @@
 import { ResourceQueue } from './resourceQueue'
-
 export interface ImageSpec { src: string; srcSet?: string; sizes?: string }
 export const resources = new ResourceQueue()
 export const resolveAsset = (value: string) => value.replaceAll('__BASE__', import.meta.env.BASE_URL)
@@ -10,7 +9,6 @@ const canonical = (value: string) => {
 interface ResidentImage { image: HTMLImageElement; decoded: boolean }
 // Retain native handles for this document. Decode page images, not every zoom file.
 const residents = new Map<string, ResidentImage>()
-const videos = new Map<string, string>()
 let residentSelection = false
 export function useResidentImageSelection() { residentSelection = true }
 export function imageCandidates(spec: ImageSpec) {
@@ -22,7 +20,6 @@ export function imageCandidates(spec: ImageSpec) {
 export function imageUrl(spec: ImageSpec) {
   let candidates = imageCandidates(spec)
   if (!candidates.length) return resolveAsset(spec.src)
-  // Rotation chooses downloaded candidates, including a warmed largest variant.
   if (residentSelection) {
     const available = candidates.filter(item => residents.has(canonical(item.url)))
     if (available.length) candidates = available
@@ -64,15 +61,13 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
   return new Promise<void>((resolve, reject) => {
     const image = new Image()
     demand.image = image
-    image.decoding = 'async'
-    image.fetchPriority = priority <= 1 ? 'high' : 'auto'
+    image.decoding = 'async'; image.fetchPriority = priority <= 1 ? 'high' : 'auto'
     let done = false
     const finish = (error?: unknown) => {
       if (done) return
       done = true
       window.clearTimeout(timer)
-      image.onload = image.onerror = null
-      demand.image = undefined
+      image.onload = image.onerror = null; demand.image = undefined
       if (error) { image.removeAttribute('src'); reject(error) }
       else { residents.set(url, { image, decoded: demand.decode }); resolve() }
     }
@@ -98,9 +93,7 @@ export function requestImage(url: string, priority: number, decode = false, retr
         const resident = residents.get(url)
         if (resident) {
           if (current.decode && !resident.decoded) { await resident.image.decode(); resident.decoded = true }
-        } else {
-          await transferImage(url, current, resources.get(imageTaskId(url))?.priority ?? priority)
-        }
+        } else { await transferImage(url, current, resources.get(imageTaskId(url))?.priority ?? priority) }
         return
       } catch (error) {
         if (attempt >= 1 || !navigator.onLine) throw error
@@ -111,24 +104,6 @@ export function requestImage(url: string, priority: number, decode = false, retr
     retry, refresh: decode && !imageIsPrepared(url),
     promote: () => { if (current.image) current.image.fetchPriority = 'high' },
   })
-}
-export function preparedVideoUrl(url: string) { return videos.get(canonical(resolveAsset(url))) }
-export function requestVideo(url: string, priority: number, retry = false) {
-  url = canonical(resolveAsset(url))
-  return resources.request(`video:${url}`, async () => {
-    if (videos.has(url)) return
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 180000)
-    try {
-      const response = await fetch(url, { signal: controller.signal, cache: 'default' })
-      if (!response.ok) throw new Error(`Video HTTP ${response.status}: ${url}`)
-      const blob = await response.blob()
-      if (!blob.size) throw new Error(`Empty video: ${url}`)
-      // The full response has filled the ordinary HTTP cache. Keep the canonical
-      // video URL; Blob sources failed in the isolated WebKit MP4 control test.
-      videos.set(url, url)
-    } finally { window.clearTimeout(timer) }
-  }, priority, { retry })
 }
 export function waitAbortable<T>(promise: Promise<T>, signal: AbortSignal) {
   return new Promise<T>((resolve, reject) => {
