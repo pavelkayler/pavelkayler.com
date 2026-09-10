@@ -54,7 +54,6 @@ export function Header({ overlay = false }: { overlay?: boolean }) {
                       className="link"
                       to={item.to}
                       end={item.to === '/'}
-                      viewTransition
                       onPointerEnter={warmRoute(item.to)}
                       onFocus={warmRoute(item.to)}
                       onPointerDown={warmRoute(item.to)}
