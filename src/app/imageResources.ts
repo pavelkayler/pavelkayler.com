@@ -8,8 +8,7 @@ const canonical = (value: string) => {
   return url.origin === location.origin ? url.pathname + url.search : url.href
 }
 interface ResidentImage { image: HTMLImageElement; decoded: boolean }
-// Session-scoped handles preserve the downloaded resources between routes. Only
-// page-sized variants are decoded up front; zoom images keep their native handles.
+// Retain native handles for this document. Decode page images, not every zoom file.
 const residents = new Map<string, ResidentImage>()
 const videos = new Map<string, string>()
 let residentSelection = false
@@ -23,8 +22,7 @@ export function imageCandidates(spec: ImageSpec) {
 export function imageUrl(spec: ImageSpec) {
   let candidates = imageCandidates(spec)
   if (!candidates.length) return resolveAsset(spec.src)
-  // After reveal, resize/rotation selects a resident variant rather than initiating
-  // another transfer. Startup includes the largest candidate as well as the entry size.
+  // Rotation chooses downloaded candidates, including a warmed largest variant.
   if (residentSelection) {
     const available = candidates.filter(item => residents.has(canonical(item.url)))
     if (available.length) candidates = available
@@ -40,7 +38,6 @@ export function imageUrl(spec: ImageSpec) {
   const pixels = slot * (window.devicePixelRatio || 1)
   return (candidates.find(item => item.width >= pixels) || candidates[candidates.length - 1]).url
 }
-
 let viewportRevision = 0
 const viewportListeners = new Set<() => void>()
 let resizeTimer: number | undefined
@@ -56,7 +53,6 @@ window.addEventListener('resize', () => {
     for (const listener of viewportListeners) listener()
   }, 120)
 })
-
 export const imageTaskId = (url: string) => `image:${canonical(url)}`
 export const imageIsDownloaded = (url: string) => residents.has(canonical(url))
 export function imageIsPrepared(url: string) {
@@ -80,7 +76,6 @@ function transferImage(url: string, demand: { decode: boolean; image?: HTMLImage
       if (error) { image.removeAttribute('src'); reject(error) }
       else { residents.set(url, { image, decoded: demand.decode }); resolve() }
     }
-    // This is a per-resource stall, not an automatic dismissal of the startup gate.
     const timer = window.setTimeout(() => finish(new Error(`Image timed out: ${url}`)), 120000)
     image.onerror = () => finish(new Error(`Image unavailable: ${url}`))
     image.onload = () => {
@@ -113,12 +108,10 @@ export function requestImage(url: string, priority: number, decode = false, retr
       }
     }
   }, priority, {
-    retry,
-    refresh: decode && !imageIsPrepared(url),
+    retry, refresh: decode && !imageIsPrepared(url),
     promote: () => { if (current.image) current.image.fetchPriority = 'high' },
   })
 }
-
 export function preparedVideoUrl(url: string) { return videos.get(canonical(resolveAsset(url))) }
 export function requestVideo(url: string, priority: number, retry = false) {
   url = canonical(resolveAsset(url))
@@ -131,13 +124,12 @@ export function requestVideo(url: string, priority: number, retry = false) {
       if (!response.ok) throw new Error(`Video HTTP ${response.status}: ${url}`)
       const blob = await response.blob()
       if (!blob.size) throw new Error(`Empty video: ${url}`)
-      // Local Blob playback prevents a video element from issuing fresh HTTP Range
-      // transfers after the single startup download. Browsers release URLs on unload.
-      videos.set(url, URL.createObjectURL(blob))
+      // The full response has filled the ordinary HTTP cache. Keep the canonical
+      // video URL; Blob sources failed in the isolated WebKit MP4 control test.
+      videos.set(url, url)
     } finally { window.clearTimeout(timer) }
   }, priority, { retry })
 }
-
 export function waitAbortable<T>(promise: Promise<T>, signal: AbortSignal) {
   return new Promise<T>((resolve, reject) => {
     const aborted = () => reject(new DOMException('Navigation superseded', 'AbortError'))
