@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""First-screen gate and one-screen-ahead lazy images, using real HTTP/browser cache."""
+"""First-screen gate and two-screen-ahead lazy images, using real HTTP/browser cache."""
 import argparse
 import asyncio
 from functools import partial
@@ -133,23 +133,28 @@ async def exercise(browser, name, mobile, output, base=None):
                 assert not any(portrait_tail in url for _,_,url in requests), 'Last Portraits photo requested before approaching it'
             scroller = await page.evaluate_handle(SCROLLER)
             result.setdefault('scroll_roots', []).append(await scroller.evaluate('(e)=>({tag:e.tagName,id:e.id,height:e.clientHeight,scrollHeight:e.scrollHeight,scrollTop:e.scrollTop,overflow:getComputedStyle(e).overflowY})'))
-            # Position the observer sample from real photograph geometry. Fixed
-            # scroll deltas can overshoot all photos in a short album, especially
-            # after Back restores a scrolled category card on the mobile BODY.
+            # The long Portraits album probes the newly included THIRD screen.
+            # Keep the existing nearer sample for short albums whose entire photo
+            # grid may be shorter than three screens on a mobile viewport.
             await scroller.evaluate('(el)=>{el.scrollTop=0}')
             await page.wait_for_timeout(200)
-            target = await page.locator('.album-masonry .piece img').evaluate_all('''imgs => {
+            sample_screen = 2.25 if route == 'portraits' else 1.25
+            target = await page.locator('.album-masonry .piece img').evaluate_all('''(imgs, far) => {
               const items=imgs.map((i,index)=>({index,y:i.getBoundingClientRect().top}));
+              if(far) return items.find(i=>i.y>innerHeight*3.1);
               return items.find(i=>i.y>innerHeight*2.1) || items.find(i=>i.y>innerHeight+30);
-            }''')
-            assert target, f'No photo below the first screen: {route}'
-            await scroller.evaluate('(el,y)=>{el.scrollTop=Math.max(0,y-el.clientHeight*1.25)}', target['y'])
+            }''', route == 'portraits')
+            assert target, f'No photo below the required lookahead sample: {route}'
+            await scroller.evaluate('(el, sample)=>{el.scrollTop=Math.max(0,sample.y-el.clientHeight*sample.screen)}', {'y':target['y'],'screen':sample_screen})
             await page.wait_for_timeout(350)
             sample = await page.locator('.album-masonry .piece img').nth(target['index']).evaluate('''i=>({
               y:i.getBoundingClientRect().top, loading:i.loading,
               ahead:i.closest('[data-role="lazy-image"]').dataset.ahead, height:innerHeight
             })''')
-            assert sample['height']+10 < sample['y'] < sample['height']*1.9, sample
+            if route == 'portraits':
+                assert sample['height']*2.1 < sample['y'] < sample['height']*2.9, sample
+            else:
+                assert sample['height']+10 < sample['y'] < sample['height']*1.9, sample
             assert sample['loading']=='eager' and sample['ahead']=='ready', sample
             result.setdefault('offscreen_promotion_samples',[]).append({'route':route,**sample})
             await page.wait_for_function(VISIBLE)

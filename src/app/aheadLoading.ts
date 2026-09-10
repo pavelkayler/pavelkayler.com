@@ -1,4 +1,6 @@
-/** Native lazy loading, promoted one scrollport-height ahead. One observer per root. */
+/** Native lazy loading, promoted two scrollport-heights ahead. One observer per root. */
+// Three screens in total: the visible screen plus two below it.
+const SCREENS_AHEAD = 2
 interface Group {
   callbacks: Map<Element, () => void>
   observer: IntersectionObserver
@@ -44,7 +46,7 @@ export function observeAhead(element: Element, ready: () => void) {
             callback?.()
           }
           drop(root, entry)
-        }, { root, rootMargin: `0px 0px ${height}px 0px`, threshold: 0 })
+        }, { root, rootMargin: `0px 0px ${height * SCREENS_AHEAD}px 0px`, threshold: 0 })
         for (const target of callbacks.keys()) entry.observer.observe(target)
       }
       entry.callbacks = callbacks; entry.rebuild = rebuild
