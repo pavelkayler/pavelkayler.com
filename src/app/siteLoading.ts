@@ -1,7 +1,8 @@
-import { allRoutes, albumPlan, fullscreenImages, mainPlans, screenPlan, normalizeRoute, coverVideos } from '../content/loading-plan'
+import { allRoutes, albums, albumPlan, fullscreenImages, mainPlans, screenPlan, normalizeRoute, coverVideos } from '../content/loading-plan'
 import { imageCandidates, imageTaskId, imageUrl, requestImage, resources,
   resolveAsset, useResidentImageSelection, type ImageSpec } from './imageResources'
 import { requestVideo } from './videoResources'
+import { requestCoverPoster } from './coverPosters'
 import { preloadRouteModule } from './routeModules'
 
 export type InitialPhase = 'loading' | 'ready' | 'degraded'
@@ -66,6 +67,8 @@ export function prepareStartup(_path: string, retry = false): ResourceWork {
     { id: fonts, promise: resources.request(fonts, () => bounded(
       Promise.all(Array.from(document.fonts, face => face.load())).then(() => document.fonts.ready), fonts).then(() => undefined), 0, { retry }) },
     ...imageWork(all, 2, true, retry),
+    ...Object.values(albums).flatMap(album => album.cover?.poster
+      ? [requestCoverPoster(album.cover.poster, 2, retry)] : []),
     ...additional.map(url => ({ id: imageTaskId(url), promise: requestImage(url, 4, false, retry) })),
     ...coverVideos.map(src => ({ id: `video:${resolveAsset(src)}`, promise: requestVideo(src, 6, retry) })),
   ])

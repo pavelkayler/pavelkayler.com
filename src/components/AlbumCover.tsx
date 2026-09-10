@@ -3,6 +3,7 @@ import type { AlbumCover as AlbumCoverData } from '../content/types'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { resolveAsset } from '../app/imageResources'
 import { preparedVideo } from '../app/videoResources'
+import { preparedPoster } from '../app/coverPosters'
 import { getInitialPhase, subscribeInitialPhase } from '../app/siteLoading'
 import { LogoSpacer } from './LogoSpacer'
 
@@ -17,7 +18,10 @@ export function AlbumCover({ cover }: { cover: AlbumCoverData }) {
     const video = phase !== 'loading' ? (preparedVideo(cover.videoSrc) || document.createElement('video')) : document.createElement('video')
     video.muted = video.defaultMuted = true
     video.loop = video.playsInline = true
-    if (cover.poster) video.poster = resolveAsset(cover.poster)
+    if (cover.poster) {
+      const poster = preparedPoster(cover.poster) || resolveAsset(cover.poster)
+      if (video.poster !== poster) video.poster = poster
+    }
     // A deliberately partial entry keeps a native fallback. Successful entry reuses
     // the very same decoder/buffer prepared before the initial loader disappeared.
     if (phase === 'degraded' && !preparedVideo(cover.videoSrc)) { video.src = resolveAsset(cover.videoSrc); video.preload = 'auto' }
