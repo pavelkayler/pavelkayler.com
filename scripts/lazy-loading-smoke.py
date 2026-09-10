@@ -89,15 +89,14 @@ async def exercise(browser, name, mobile, output, base=None):
     result = {'name':name, 'base':base, 'passed':False, 'checks':[]}
     try:
         before = time.monotonic()
-        # Commit lets the test release a held image even in engines that postpone
-        # DOMContentLoaded while a newly started high-priority image is pending.
         await page.goto(base+'/', wait_until='commit')
         if server:
             assert await asyncio.to_thread(server.hero_requested.wait, 15), 'Critical hero was never requested'
             await page.wait_for_timeout(2000)
             assert await page.locator('#site-loader').is_visible(), 'Critical hero did not hold initial loader'
             assert await page.locator('.native-home-slider img').count() == 1, 'All slides were mounted behind startup'
-            await page.screenshot(path=str(output/f'{name}-first-screen-loader.png'), animations='disabled')
+            # Screenshot font/paint waits can wait on the deliberately held hero
+            # in WebKit. Assert live state above; capture only after releasing it.
             server.release.set()
             result['checks'].append('Held first hero keeps startup visible; other slider frames do not load behind it')
         await ready(page)
@@ -118,13 +117,14 @@ async def exercise(browser, name, mobile, output, base=None):
         portrait_tail = re.search(r'(portraits-photo-\d+)', content('portraits')['photos'][-1]['image']['src'])[1]
         assert not any(portrait_tail in url for _,_,url in requests), 'Offscreen album tail was speculatively downloaded'
         assert not any('/media/video/' in url for _,_,url in requests), 'Home background preloaded whole videos'
-        # Native lazy thresholds differ. A completed image becomes eager; a count
-        # of still-lazy Home nodes is not a correctness condition on a fast server.
         result['remaining_native_lazy_home_images'] = await page.locator('#home-main .picture-section img[loading=lazy]').count()
         result['checks'].append('Six core images only; no full-site, zoom or video gate, no background album tails')
 
         for route in ('portraits','projects','brands'):
-            await page.locator('.menu-list a', has_text='WORKS').click()
+            # Back returns to Works; its current menu item is deliberately not a
+            # link. Do not wait for an impossible click on that disabled item.
+            if urlsplit(page.url).path.rstrip('/') != '/works':
+                await page.locator('.menu-list a', has_text='WORKS').click()
             await page.locator('.works-route').wait_for()
             await page.locator(f'.works-route a.listing-link[href$="/{route}"]').click()
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
