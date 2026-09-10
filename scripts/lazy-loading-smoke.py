@@ -95,8 +95,6 @@ async def exercise(browser, name, mobile, output, base=None):
             await page.wait_for_timeout(2000)
             assert await page.locator('#site-loader').is_visible(), 'Critical hero did not hold initial loader'
             assert await page.locator('.native-home-slider img').count() == 1, 'All slides were mounted behind startup'
-            # Screenshot font/paint waits can wait on the deliberately held hero
-            # in WebKit. Assert live state above; capture only after releasing it.
             server.release.set()
             result['checks'].append('Held first hero keeps startup visible; other slider frames do not load behind it')
         await ready(page)
@@ -121,8 +119,6 @@ async def exercise(browser, name, mobile, output, base=None):
         result['checks'].append('Six core images only; no full-site, zoom or video gate, no background album tails')
 
         for route in ('portraits','projects','brands'):
-            # Back returns to Works; its current menu item is deliberately not a
-            # link. Do not wait for an impossible click on that disabled item.
             if urlsplit(page.url).path.rstrip('/') != '/works':
                 await page.locator('.menu-list a', has_text='WORKS').click()
             await page.locator('.works-route').wait_for()
@@ -136,21 +132,31 @@ async def exercise(browser, name, mobile, output, base=None):
                 assert await page.locator('.album-masonry .piece img').last.get_attribute('loading') == 'lazy'
                 assert not any(portrait_tail in url for _,_,url in requests), 'Last Portraits photo requested before approaching it'
             scroller = await page.evaluate_handle(SCROLLER)
-            result.setdefault('scroll_roots', []).append(await scroller.evaluate('(e)=>({tag:e.tagName,id:e.id,height:e.clientHeight,scrollHeight:e.scrollHeight,overflow:getComputedStyle(e).overflowY})'))
-            await scroller.evaluate('(el)=>{el.scrollTop += el.clientHeight*.7}')
+            result.setdefault('scroll_roots', []).append(await scroller.evaluate('(e)=>({tag:e.tagName,id:e.id,height:e.clientHeight,scrollHeight:e.scrollHeight,scrollTop:e.scrollTop,overflow:getComputedStyle(e).overflowY})'))
+            # Position the observer sample from real photograph geometry. Fixed
+            # scroll deltas can overshoot all photos in a short album, especially
+            # after Back restores a scrolled category card on the mobile BODY.
+            await scroller.evaluate('(el)=>{el.scrollTop=0}')
+            await page.wait_for_timeout(200)
+            target = await page.locator('.album-masonry .piece img').evaluate_all('''imgs => {
+              const items=imgs.map((i,index)=>({index,y:i.getBoundingClientRect().top}));
+              return items.find(i=>i.y>innerHeight*2.1) || items.find(i=>i.y>innerHeight+30);
+            }''')
+            assert target, f'No photo below the first screen: {route}'
+            await scroller.evaluate('(el,y)=>{el.scrollTop=Math.max(0,y-el.clientHeight*1.25)}', target['y'])
             await page.wait_for_timeout(350)
-            ahead = await page.locator('.album-masonry .piece img').evaluate_all('''imgs => imgs.map(i=>({
-              y:i.getBoundingClientRect().top, bottom:i.getBoundingClientRect().bottom, loading:i.loading,
-              ahead:i.closest('[data-role="lazy-image"]').dataset.ahead
-            })).filter(i=>i.y>innerHeight+10 && i.y<innerHeight*1.9)''')
-            assert ahead, f'No offscreen next-screen photo was sampled: {route}'
-            assert all(i['loading']=='eager' and i['ahead']=='ready' for i in ahead), ahead
+            sample = await page.locator('.album-masonry .piece img').nth(target['index']).evaluate('''i=>({
+              y:i.getBoundingClientRect().top, loading:i.loading,
+              ahead:i.closest('[data-role="lazy-image"]').dataset.ahead, height:innerHeight
+            })''')
+            assert sample['height']+10 < sample['y'] < sample['height']*1.9, sample
+            assert sample['loading']=='eager' and sample['ahead']=='ready', sample
+            result.setdefault('offscreen_promotion_samples',[]).append({'route':route,**sample})
             await page.wait_for_function(VISIBLE)
             for _ in range(6):
                 await scroller.evaluate('(el)=>{el.scrollTop += el.clientHeight*.3}')
                 await page.wait_for_timeout(250)
                 await page.wait_for_function(VISIBLE)
-            # Jumping to the end may need network. Never insert a route overlay.
             last = page.locator('.album-masonry .piece img').last
             await last.scroll_into_view_if_needed()
             await page.wait_for_function(VISIBLE)
