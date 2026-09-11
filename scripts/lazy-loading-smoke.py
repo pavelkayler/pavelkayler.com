@@ -102,7 +102,7 @@ async def exercise(browser, name, mobile, output, base=None):
         await ready(page)
         result['ready_seconds_in_test'] = round(time.monotonic()-before, 3)
         snapshot = await page.evaluate('window.__portfolioLoading')
-        assert snapshot['policy'] == 'first-screens-lazy'
+        assert snapshot['policy'] == 'intent-first-screens', snapshot['policy']
         ids = snapshot['startupIds']
         images = [i[6:] for i in ids if i.startswith('image:')]
         assert len(images) == 2, f'Home startup image inventory expanded: {images}'
@@ -117,8 +117,13 @@ async def exercise(browser, name, mobile, output, base=None):
         portrait_tail = re.search(r'(portraits-photo-\d+)', content('portraits')['photos'][-1]['image']['src'])[1]
         assert not any(portrait_tail in url for _,_,url in requests), 'Offscreen album tail was speculatively downloaded'
         assert not any('/media/video/' in url for _,_,url in requests), 'Home background preloaded whole videos'
+        background_images = await page.evaluate("""() => (window.__portfolioLoading?.tasks || [])
+          .filter(task => task.id.startsWith('image:') && task.priority > 10)""")
+        # HOME may warm its own next slider frame at priority 20. Automatic site warm-up
+        # must not create image tasks for another route.
+        assert all('/media/images/home/' in task['id'] for task in background_images), background_images
         result['remaining_native_lazy_home_images'] = await page.locator('#home-main .picture-section img[loading=lazy]').count()
-        result['checks'].append('Current Home screen only; no unrelated route, zoom or video startup gate, no background album tails')
+        result['checks'].append('Home warms only its own slider; unrelated routes stay code-only until intent')
 
         for route in ('portraits','projects','brands'):
             if urlsplit(page.url).path.rstrip('/') != '/works':
@@ -126,10 +131,18 @@ async def exercise(browser, name, mobile, output, base=None):
             await page.locator('.works-route').wait_for()
             await page.locator(f'.works-route a.listing-link[href$="/{route}"]').click()
             await page.wait_for_url(re.compile(rf'/{route}/?$'))
-            await page.locator('.album-masonry').wait_for()
+            gallery = page.locator('.album-masonry')
+            await gallery.wait_for()
             await page.wait_for_function(VISIBLE)
             count = len(content(route)['photos'])
+            initial_count = await page.locator('.album-masonry .piece img').count()
+            assert 0 < initial_count <= count
+            await page.wait_for_function("""expected => {
+              const gallery=document.querySelector('.album-masonry');
+              return gallery && Number(gallery.dataset.mountedCount) === expected;
+            }""", arg=count, timeout=10000)
             assert await page.locator('.album-masonry .piece img').count() == count
+            result.setdefault('progressive_mount', []).append({'route':route,'initial':initial_count,'total':count})
             if route == 'portraits':
                 assert await page.locator('.album-masonry .piece img').last.get_attribute('loading') == 'lazy'
                 assert not any(portrait_tail in url for _,_,url in requests), 'Last Portraits photo requested before approaching it'
@@ -173,7 +186,7 @@ async def exercise(browser, name, mobile, output, base=None):
             await page.locator('.pswp__button--close').click()
             await page.locator('.pswp').wait_for(state='detached')
             await page.go_back(); await page.locator('.works-route').wait_for()
-            result['checks'].append(f'{route}: ahead-of-viewport eager promotion, actual scroll, tail, viewer, Back')
+            result['checks'].append(f'{route}: progressive mount, ahead loading, tail, viewer and Back')
         await page.locator('.menu-list a',has_text='CONTACTS').click()
         await page.wait_for_function(VISIBLE)
         await page.locator('.menu-list a',has_text='HOME').click()
@@ -258,8 +271,8 @@ async def main():
                 if name=='chromium-desktop':
                     if not args.base:
                         result=await recovery(browser,output); results.append(result); print(json.dumps(result),flush=True)
-                    result=await timing(browser,args.base,output); results.append(result); print(json.dumps(result),flush=True)
+                    result=await timing(browser,args.base.rstrip('/') if args.base else None,output); results.append(result); print(json.dumps(result),flush=True)
             finally: await browser.close()
-    (output/'report.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
-    raise SystemExit(0 if all(r['passed'] for r in results) else 1)
+    if not all(r.get('passed') for r in results): raise SystemExit(1)
+
 if __name__=='__main__': asyncio.run(main())

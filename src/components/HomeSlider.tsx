@@ -17,15 +17,31 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
     if (phase === 'loading' || reducedMotion || cover.slides.length < 2) return
     let cancelled = false
     const next = (active + 1) % cover.slides.length
-    const pending = requestImage(imageUrl({ ...cover.slides[next], sizes: '100vw' }), 20, true, true)
-      .then(() => {
-        if (!cancelled) setWarmed(current => new Set([...current, next]))
-        return true
-      }, () => false)
-    const timer = window.setTimeout(() => {
-      void pending.then(ready => { if (ready && !cancelled) setActive(next) })
+    let pending: Promise<boolean> | null = null
+
+    const warmNext = () => {
+      if (pending) return pending
+      pending = requestImage(imageUrl({ ...cover.slides[next], sizes: '100vw' }), 20, true, true)
+        .then(() => {
+          if (!cancelled) setWarmed(current => new Set([...current, next]))
+          return true
+        }, () => false)
+      return pending
+    }
+
+    // Do not immediately decode a large next hero while the visitor is most likely
+    // to choose a section. Start close to the scheduled slide change instead.
+    const warmDelay = Math.max(1000, cover.delay - 1000)
+    const warmTimer = window.setTimeout(() => { void warmNext() }, warmDelay)
+    const advanceTimer = window.setTimeout(() => {
+      void warmNext().then(ready => { if (ready && !cancelled) setActive(next) })
     }, cover.delay)
-    return () => { cancelled = true; window.clearTimeout(timer) }
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(warmTimer)
+      window.clearTimeout(advanceTimer)
+    }
   }, [active, cover.delay, cover.slides, reducedMotion, phase, viewport])
   const scrollDown = () => document.getElementById('home-main')?.scrollIntoView({
     behavior: reducedMotion ? 'auto' : 'smooth', block: 'start',

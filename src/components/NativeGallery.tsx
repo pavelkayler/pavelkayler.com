@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { requestImage } from '../app/imageResources'
 import Masonry from 'masonry-layout'
 import type { GalleryPhoto } from '../content/types'
@@ -15,22 +15,72 @@ type LightboxInstance = {
   loadAndOpen: (index: number) => boolean
 }
 
+type IdleWindow = Window & typeof globalThis & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  cancelIdleCallback?: (id: number) => void
+}
+
+const INITIAL_ITEMS = 12
+const BATCH_ITEMS = 12
+
 export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
   const galleryRef = useRef<HTMLDivElement>(null)
+  const masonryRef = useRef<Masonry | null>(null)
+  const laidOutCountRef = useRef(Math.min(INITIAL_ITEMS, photos.length))
+  const [visibleCount, setVisibleCount] = useState(() => Math.min(INITIAL_ITEMS, photos.length))
+  const visiblePhotos = photos.slice(0, visibleCount)
 
+  // Only the first small batch participates in the blocking pre-paint layout. Long
+  // albums are appended afterwards, so entering the route never lays out 40-50 items
+  // before the browser can show its first frame.
   useLayoutEffect(() => {
     const gallery = galleryRef.current
     if (!gallery) return
 
+    laidOutCountRef.current = Math.min(INITIAL_ITEMS, photos.length)
     const masonry = new Masonry(gallery, {
       itemSelector: '.piece',
       percentPosition: true,
       transitionDuration: 0,
     })
+    masonryRef.current = masonry
     masonry.layout?.()
 
-    return () => masonry.destroy?.()
+    return () => {
+      masonry.destroy?.()
+      if (masonryRef.current === masonry) masonryRef.current = null
+    }
   }, [photos])
+
+  // Give the destination route a generous quiet window before adding below-fold DOM.
+  // Subsequent batches are scheduled only when the main thread becomes idle.
+  useEffect(() => {
+    if (visibleCount >= photos.length) return
+    const idleWindow = window as IdleWindow
+    let idleId: number | undefined
+    const delay = visibleCount <= INITIAL_ITEMS ? 600 : 80
+    const timer = window.setTimeout(() => {
+      const append = () => setVisibleCount(current => Math.min(current + BATCH_ITEMS, photos.length))
+      if (idleWindow.requestIdleCallback) idleId = idleWindow.requestIdleCallback(append, { timeout: 450 })
+      else append()
+    }, delay)
+    return () => {
+      window.clearTimeout(timer)
+      if (idleId !== undefined) idleWindow.cancelIdleCallback?.(idleId)
+    }
+  }, [visibleCount, photos.length])
+
+  // Position only the nodes React just appended. Masonry's appended() preserves the
+  // already-laid-out items, avoiding repeated full-gallery measurement/layout passes.
+  useLayoutEffect(() => {
+    const masonry = masonryRef.current
+    const gallery = galleryRef.current
+    if (!masonry || !gallery || visibleCount <= laidOutCountRef.current) return
+    const pieces = Array.from(gallery.querySelectorAll<HTMLElement>('.piece'))
+    const added = pieces.slice(laidOutCountRef.current, visibleCount)
+    if (added.length) masonry.appended?.(added)
+    laidOutCountRef.current = visibleCount
+  }, [visibleCount])
 
   useEffect(() => {
     const gallery = galleryRef.current
@@ -65,15 +115,14 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
       return initialization
     }
 
-    // A gallery route is already an explicit user intent to browse photographs, so
-    // initialize its small lightbox controller immediately. The previous viewport
-    // observer could miss an absolutely-positioned Masonry container and leave every
-    // photo as a plain link with no PhotoSwipe handler attached.
-    void ensureLightbox().catch(() => undefined)
+    const handleIntent = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Element) || !target.closest('a.js-gallery-link')) return
+      void ensureLightbox().catch(() => undefined)
+    }
 
-    // Also cover the short interval while the dynamic module is downloading. If the
-    // first tap arrives before init() completes, keep the browser on the gallery and
-    // open that exact photograph as soon as PhotoSwipe is ready.
+    // If the first click arrives before the dynamic module has loaded, keep the user
+    // on the gallery and open the selected photograph as soon as PhotoSwipe is ready.
     const handleEarlyClick = (event: MouseEvent) => {
       if (cancelled || event.defaultPrevented || event.button !== 0 ||
           event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
@@ -98,10 +147,14 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
       }).catch(() => { if (!cancelled && anchor.isConnected) window.location.assign(anchor.href) })
     }
 
+    gallery.addEventListener('pointerover', handleIntent, { passive: true })
+    gallery.addEventListener('focusin', handleIntent)
     gallery.addEventListener('click', handleEarlyClick, true)
 
     return () => {
       cancelled = true
+      gallery.removeEventListener('pointerover', handleIntent)
+      gallery.removeEventListener('focusin', handleIntent)
       gallery.removeEventListener('click', handleEarlyClick, true)
       lightbox?.destroy()
     }
@@ -112,8 +165,10 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
       ref={galleryRef}
       className="album-grid js-album-grid album-masonry js-album-masonry js-gallery"
       data-gallery-initial-zoom="true"
+      data-mounted-count={visiblePhotos.length}
+      data-total-count={photos.length}
     >
-      {photos.map((photo, index) => (
+      {visiblePhotos.map((photo, index) => (
         <div
           className="piece -photo"
           data-aspect={photo.aspect}
