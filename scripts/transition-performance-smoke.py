@@ -61,14 +61,15 @@ async def main():
             assert route_animation == 'none', f'Whole-route animation is still active: {route_animation}'
             assert await page.locator('.route-transition-shield').count() == 1, 'Viewport transition shield missing'
 
-            # Let automatic site warm-up run. It may warm route JavaScript, but it must
-            # not enqueue/decode photographs from pages the user has not asked for.
+            # Let automatic site warm-up run. HOME may prepare its own next slider
+            # frame, but unrelated route photographs must remain untouched until intent.
             await page.wait_for_timeout(2200)
             speculative_images = await page.evaluate("""() =>
               (window.__portfolioLoading?.tasks || []).filter(task =>
                 task.id.startsWith('image:') && task.priority > 10)
             """)
-            assert speculative_images == [], f'Background image warm-up returned: {speculative_images}'
+            unrelated_images = [task for task in speculative_images if '/media/images/home/' not in task['id']]
+            assert unrelated_images == [], f'Background route image warm-up returned: {unrelated_images}'
 
             # Add real latency to image requests after HOME is ready. Route rendering
             # must remain responsive because navigation never waits for image decode.
