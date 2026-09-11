@@ -48,8 +48,10 @@ export function HomeSlider({ cover }: { cover: HomeContent['cover'] }) {
       <div className="cover-wrapper js-cover-wrapper -has-arrows">
         <LogoSpacer coverSize="medium" />
         <div className="cover-content">
-          <div className="home-site-logo"><SiteLogo /></div>
-          <h1 className="cover-header -medium">{cover.title}</h1><p>{cover.subtitle}</p>
+          <div className="home-hero-copy">
+            <div className="home-site-logo"><SiteLogo /></div>
+            <h1 className="cover-header -medium">{cover.title}</h1><p>{cover.subtitle}</p>
+          </div>
         </div>
         <div className="cover-aside">
           <button className="cover-down-arrow js-cover-down-arrow" type="button" onClick={scrollDown} aria-label="Прокрутить вниз" />
