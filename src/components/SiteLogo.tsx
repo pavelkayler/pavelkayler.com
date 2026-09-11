@@ -32,6 +32,7 @@ export function SiteLogo() {
             style={{ maxHeight: siteLogo.maxHeight }}
             decoding="async"
           />
+          <span className="logo-wordmark" aria-hidden="true">PAVEL KAYLER</span>
         </span>
       </Link>
     </div>
