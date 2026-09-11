@@ -104,7 +104,7 @@ export function HomePage() {
                 </section>
               </div>
             ))}
-          </div></div></div>
+          </div></div>
         </div>
 
         <div className="sections-container -medium-width -top-align -medium-pad-before -theme-pad-after -background-accent -visible">
