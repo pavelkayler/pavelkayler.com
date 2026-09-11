@@ -25,6 +25,7 @@ SCROLLER = """() => [...document.querySelectorAll('*')].find(el =>
 ) || document.scrollingElement"""
 VISIBLE = """() => [...document.querySelectorAll('.react-route img')].filter(i => {
  if(i.closest('[aria-hidden="true"]')) return false;
+ if(i.classList.contains('logo-image') && i.closest('.logo-with-placeholder')?.querySelector('.logo-wordmark')) return false;
  const r=i.getBoundingClientRect();return r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight;
 }).every(i=>i.complete && i.naturalWidth>0 && getComputedStyle(i).opacity==='1')"""
 
@@ -134,8 +135,6 @@ async def exercise(browser, name, mobile, output, base=None):
                 assert not any(portrait_tail in url for _,_,url in requests), 'Last Portraits photo requested before approaching it'
             scroller = await page.evaluate_handle(SCROLLER)
             result.setdefault('scroll_roots', []).append(await scroller.evaluate('(e)=>({tag:e.tagName,id:e.id,height:e.clientHeight,scrollHeight:e.scrollHeight,scrollTop:e.scrollTop,overflow:getComputedStyle(e).overflowY})'))
-            # Use the long Portraits album to test the newly added THIRD screen.
-            # Keep closer samples in shorter albums to avoid scrolling past their end.
             await scroller.evaluate('(el)=>{el.scrollTop=0}')
             await page.wait_for_timeout(200)
             sample_screens = 2.25 if route == 'portraits' else 1.25
