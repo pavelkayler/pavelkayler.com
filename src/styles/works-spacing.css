@@ -1,0 +1,34 @@
+@media (min-width: 769px) {
+  /* Keep the two textual gaps on WORKS identical:
+     header rule -> Works heading == card captions -> quote text. */
+  .react-page-wrapper.is-works-route .works-route {
+    --works-vertical-text-gap: 38px;
+
+    /* Increasing the caption-to-quote gap from 16px to 38px adds 22px to the
+       fixed vertical budget. Subtract 44px from the three-card row width so the
+       3:2 portrait cards shrink by exactly 22px in height and the page stays 100vh. */
+    --works-row-width: min(
+      calc(100% - 100px),
+      calc(200vh - 644px + var(--works-row-gap) + var(--works-row-gap))
+    );
+  }
+
+  /* Desktop menu/header is 54px tall. Using the same variable here makes the
+     distance from its bottom rule to the Works text exactly 38px. */
+  .react-page-wrapper.is-works-route .works-page-title {
+    margin-top: calc(54px + var(--works-vertical-text-gap));
+  }
+
+  /* Remove the inline baseline tail below the caption text, so the measured and
+     visible lower edge of the title is also the lower edge of the caption row. */
+  .react-page-wrapper.is-works-route .listing-caption {
+    display: flex;
+    justify-content: center;
+  }
+
+  /* The first quote paragraph has no top margin, so this padding is the actual
+     line-box gap between the card captions and the quote text. */
+  .react-page-wrapper.is-works-route .sections-container.-listing-postfix .sections-container-inner {
+    padding-top: var(--works-vertical-text-gap);
+  }
+}
