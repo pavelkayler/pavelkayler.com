@@ -19,6 +19,13 @@
     margin-top: calc(54px + var(--works-vertical-text-gap));
   }
 
+  /* Remove the inline baseline tail below the caption text, so the measured and
+     visible lower edge of the title is also the lower edge of the caption row. */
+  .react-page-wrapper.is-works-route .listing-caption {
+    display: flex;
+    justify-content: center;
+  }
+
   /* The first quote paragraph has no top margin, so this padding is the actual
      line-box gap between the card captions and the quote text. */
   .react-page-wrapper.is-works-route .sections-container.-listing-postfix .sections-container-inner {
