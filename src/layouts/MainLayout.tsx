@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
@@ -15,9 +15,19 @@ export function MainLayout() {
   const path = pathname.replace(/\/+$/, '') || '/'
   const key = routeToKey[path]
   const page = key ? pages[key] : undefined
+  const previousPathRef = useRef(path)
+  const previousPath = previousPathRef.current
+  const logoTransition = previousPath === '/' && path !== '/'
+    ? ' logo-transition-from-home'
+    : previousPath !== '/' && path === '/'
+      ? ' logo-transition-to-home'
+      : ''
+
   useLayoutEffect(() => { if (page) applyPageMetadata(page) }, [page])
+  useLayoutEffect(() => { previousPathRef.current = path }, [path])
+
   return (
-    <div className={`page-wrapper react-page-wrapper${path === '/' ? ' is-home-route' : ''}`}>
+    <div className={`page-wrapper react-page-wrapper${path === '/' ? ' is-home-route' : ''}${logoTransition}`}>
       <Header overlay={page?.hasCover ?? false} />
       <div className="persistent-site-logo"><SiteLogo /></div>
       <Outlet />
