@@ -1,0 +1,7 @@
+/* The imported Wfolio rule makes picture-section images inline-block. StructuredImage
+   now uses a CSS placeholder instead of an intrinsic-size canvas, so Contacts needs
+   an explicit width to avoid the shrink-to-fit box collapsing to zero. */
+.contacts-photo .lazy-image {
+  display: block;
+  width: 100%;
+}

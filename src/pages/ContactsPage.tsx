@@ -2,6 +2,7 @@ import { contactsContent } from '../content/pages/contacts'
 import { LogoSpacer } from '../components/LogoSpacer'
 import { StructuredImage } from '../components/StructuredImage'
 import { usePageMeta } from '../hooks/usePageMeta'
+import '../styles/contacts.css'
 
 export function ContactsPage() {
   usePageMeta('contacts')
@@ -15,7 +16,7 @@ export function ContactsPage() {
           <div className="sections-container-inner"><div className="row">
             <div className="col-sm-12 col-md-4" />
             <div className="col-sm-12 col-md-4">
-              <section className="section-container picture-section -default -square">
+              <section className="section-container picture-section contacts-photo -default -square">
                 <StructuredImage image={contactsContent.image} sizes="(max-width: 768px) 100vw, 33vw" loading="eager" fetchPriority="high" />
               </section>
             </div>
