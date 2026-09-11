@@ -1,12 +1,13 @@
 import { allRoutes } from '../content/loading-plan'
-import { getInitialPhase, prepareScreen } from './siteLoading'
+import { getInitialPhase, prepareCode, prepareScreen } from './siteLoading'
 import { resources } from './imageResources'
 
-export function prefetchRoute(path: string) {
-  if (getInitialPhase() !== 'loading') prepareScreen(path, 20)
+/** Explicit user intent may warm the destination first screen. Hover/focus use 5; pointer-down uses 0. */
+export function prefetchRoute(path: string, priority = 5) {
+  if (getInitialPhase() !== 'loading') prepareScreen(path, priority)
 }
 let scheduled = false
-/** A small, nonblocking warm-up of other first screens, not all their images. */
+/** Quietly warm only route JavaScript. Never spend background bandwidth/CPU decoding other pages' photos. */
 export function scheduleSiteWarmup(path: string) {
   if (scheduled) return
   scheduled = true
@@ -18,6 +19,6 @@ export function scheduleSiteWarmup(path: string) {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection
   if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || '')) return
   window.setTimeout(() => {
-    for (const route of allRoutes) if (route !== path) prepareScreen(route, 30)
-  }, 1500)
+    for (const route of allRoutes) if (route !== path) prepareCode(route, 40)
+  }, 1800)
 }
