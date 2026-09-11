@@ -22,7 +22,7 @@ function normalizePath(pathname: string) {
 export function Header({ overlay = false }: { overlay?: boolean }) {
   const { pathname } = useLocation()
   const currentPath = normalizePath(pathname)
-  const warmRoute = (path: string) => () => prefetchRoute(path)
+  const warmRoute = (path: string, priority: number) => () => prefetchRoute(path, priority)
 
   return (
     <header className={`page-header js-header -visible${overlay ? ' -overlay' : ''}`}>
@@ -54,9 +54,9 @@ export function Header({ overlay = false }: { overlay?: boolean }) {
                       className="link"
                       to={item.to}
                       end={item.to === '/'}
-                      onPointerEnter={warmRoute(item.to)}
-                      onFocus={warmRoute(item.to)}
-                      onPointerDown={warmRoute(item.to)}
+                      onPointerEnter={warmRoute(item.to, 5)}
+                      onFocus={warmRoute(item.to, 5)}
+                      onPointerDown={warmRoute(item.to, 0)}
                     >
                       {item.label}
                     </NavLink>
