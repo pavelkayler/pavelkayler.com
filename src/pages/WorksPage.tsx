@@ -18,10 +18,11 @@ export function WorksPage() {
           <div className="sections-container-inner"><div className="section-container">
             <div className="listing js-listing" data-format="portrait" data-hover="underline">
               {worksContent.cards.map((card) => {
-                const warm = () => prefetchRoute(card.to)
+                const warm = () => prefetchRoute(card.to, 5)
+                const demand = () => prefetchRoute(card.to, 0)
                 return (
                   <div className="listing-item js-listing-item" key={card.to}>
-                    <Link className="listing-link" to={card.to} onPointerEnter={warm} onFocus={warm} onPointerDown={warm}>
+                    <Link className="listing-link" to={card.to} onPointerEnter={warm} onFocus={warm} onPointerDown={demand}>
                       <StructuredImage image={card.image} loading="eager" sizes="(max-width: 768px) 100vw, 33vw" />
                       <div className="listing-caption"><div className="listing-title"><span>{card.title}</span></div></div>
                     </Link>
