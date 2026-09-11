@@ -15,7 +15,7 @@ export function ContactsPage() {
           <div className="sections-container-inner"><div className="row">
             <div className="col-sm-12 col-md-4" />
             <div className="col-sm-12 col-md-4">
-              <section className="section-container picture-section -default -square">
+              <section className="section-container picture-section contacts-photo -default -square">
                 <StructuredImage image={contactsContent.image} sizes="(max-width: 768px) 100vw, 33vw" loading="eager" fetchPriority="high" />
               </section>
             </div>
