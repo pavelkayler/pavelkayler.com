@@ -1,0 +1,51 @@
+/* Route changes no longer animate one shared logo between two positions.
+   HOME owns its centred hero mark; inner pages own the compact header mark. */
+.react-page-wrapper .persistent-site-logo {
+  animation: none !important;
+  will-change: auto !important;
+}
+
+/* Keep the existing slogan/subtitle block in its original flex position. The logo is
+   absolutely attached to that block, so only PAVEL KAYLER moves down; the existing
+   LONELINESS… and subtitle coordinates do not move. */
+.react-page-wrapper.is-home-route .home-hero-copy {
+  position: relative;
+  --home-hero-copy-gap: 12px;
+  text-align: center;
+}
+
+.react-page-wrapper.is-home-route .home-hero-copy > p {
+  margin-top: var(--home-hero-copy-gap);
+}
+
+.home-site-logo {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(100% + var(--home-hero-copy-gap));
+  width: 209px;
+  height: 35px;
+  transform: translateX(-50%);
+  line-height: 0;
+  text-align: center;
+}
+
+.home-site-logo .logo {
+  margin: 0 !important;
+  opacity: 1 !important;
+  text-align: center;
+}
+
+.home-site-logo .logo-link,
+.home-site-logo .logo-with-placeholder {
+  width: 209px;
+  max-width: 209px !important;
+}
+
+.home-site-logo .logo-image {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 35px !important;
+}
