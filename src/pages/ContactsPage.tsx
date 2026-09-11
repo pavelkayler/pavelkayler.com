@@ -2,6 +2,7 @@ import { contactsContent } from '../content/pages/contacts'
 import { LogoSpacer } from '../components/LogoSpacer'
 import { StructuredImage } from '../components/StructuredImage'
 import { usePageMeta } from '../hooks/usePageMeta'
+import '../styles/contacts.css'
 
 export function ContactsPage() {
   usePageMeta('contacts')
