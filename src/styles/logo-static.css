@@ -70,6 +70,7 @@
    approved Thin concept without changing any surrounding layout. */
 .logo-with-placeholder {
   position: relative;
+  display: inline-block;
 }
 
 .logo-with-placeholder .logo-image {
