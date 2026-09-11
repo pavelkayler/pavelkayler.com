@@ -22,13 +22,15 @@ export function screenPlan(path: string): ImageSpec[] {
   if (path === '/contacts') return [{ ...contactsContent.image, sizes: MAIN_IMAGE_SIZES }]
   const album = albums[path as keyof typeof albums]
   if (!album) return []
-  // Prime the first row only. The rendered first-screen check promotes any additional
-  // partially visible Masonry images before the startup mask disappears.
-  return [...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
-    ...album.photos.slice(0, 3).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))]
+
+  // Covered albums show only the cover in the initial viewport. Do not spend the
+  // click/entry window decoding gallery photos that are still below the fold.
+  if (album.cover?.poster) return [{ src: album.cover.poster }]
+
+  // Uncovered albums (Brands) start directly with the gallery, so prime its first row.
+  return album.photos.slice(0, 3).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))
 }
 export function startupPlan(path: string): ImageSpec[] {
-  // Do not make entry to one page depend on assets from unrelated routes. Their first
-  // screens are warmed shortly after reveal by scheduleSiteWarmup().
+  // Initial entry depends only on assets that can actually appear in the first viewport.
   return screenPlan(path)
 }
