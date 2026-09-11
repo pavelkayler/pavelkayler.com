@@ -31,11 +31,13 @@ export function AlbumCover({ cover }: { cover: AlbumCoverData }) {
 
     const idleWindow = window as IdleWindow
     let idleId: number | undefined
+    // Keep network/video decode away from route commit and the first below-fold
+    // gallery batches. The poster fully covers this short stabilization interval.
     const timer = window.setTimeout(() => {
       const arm = () => setVideoArmed(true)
       if (idleWindow.requestIdleCallback) idleId = idleWindow.requestIdleCallback(arm, { timeout: 900 })
       else arm()
-    }, 750)
+    }, 1200)
 
     return () => {
       window.clearTimeout(timer)
