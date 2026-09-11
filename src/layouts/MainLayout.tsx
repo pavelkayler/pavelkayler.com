@@ -27,6 +27,7 @@ export function MainLayout() {
       <Header overlay={page?.hasCover ?? false} />
       <Outlet />
       <Footer />
+      <div className="route-transition-shield" key={path} aria-hidden="true" />
       <ScrollRestoration />
     </div>
   )
