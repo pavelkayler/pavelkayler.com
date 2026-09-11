@@ -78,7 +78,7 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     if (!masonry || !gallery || visibleCount <= laidOutCountRef.current) return
     const pieces = Array.from(gallery.querySelectorAll<HTMLElement>('.piece'))
     const added = pieces.slice(laidOutCountRef.current, visibleCount)
-    if (added.length) masonry.appended(added)
+    if (added.length) masonry.appended?.(added)
     laidOutCountRef.current = visibleCount
   }, [visibleCount])
 
