@@ -96,14 +96,21 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             await page.set_viewport_size({"width": width, "height": 850})
             await page.wait_for_timeout(250)
             await screenshot('works-850')
-            fit = await page.evaluate("""() => ({
-              viewport: innerHeight,
-              scroll: document.documentElement.scrollHeight,
-              captions: [...document.querySelectorAll('.works-route .listing-caption')].map(el => el.getBoundingClientRect().bottom),
-              footer: document.querySelector('.page-footer')?.getBoundingClientRect().bottom ?? 0,
-            })""")
+            fit = await page.evaluate("""() => {
+              const wrapper = document.querySelector('.react-page-wrapper.is-works-route')?.getBoundingClientRect()
+              const footer = document.querySelector('.page-footer')?.getBoundingClientRect()
+              return {
+                viewport: innerHeight,
+                scroll: document.documentElement.scrollHeight,
+                wrapperHeight: wrapper?.height ?? 0,
+                captions: [...document.querySelectorAll('.works-route .listing-caption')].map(el => el.getBoundingClientRect().bottom),
+                footerTop: footer?.top ?? 0,
+                footerBottom: footer?.bottom ?? 0,
+              }
+            }""")
             assert max(fit['captions']) < fit['viewport'], f'Works captions fall below first screen: {fit}'
-            assert fit['footer'] <= fit['viewport'] + 3, f'Works page should fit one 850px desktop viewport: {fit}'
+            assert abs(fit['wrapperHeight'] - fit['viewport']) <= 2, f'Works wrapper is not exactly 100vh: {fit}'
+            assert fit['viewport'] - 20 <= fit['footerBottom'] <= fit['viewport'] + 2, f'Works footer is not pinned to viewport bottom: {fit}'
             assert fit['scroll'] <= fit['viewport'] + 3, f'Works page still scrolls at 850px desktop height: {fit}'
             await page.set_viewport_size({"width": width, "height": height})
             await page.wait_for_timeout(150)

@@ -22,12 +22,17 @@ export function MainLayout() {
     : previousPath !== '/' && path === '/'
       ? ' logo-transition-to-home'
       : ''
+  const routeClass = path === '/'
+    ? ' is-home-route'
+    : path === '/works'
+      ? ' is-works-route'
+      : ''
 
   useLayoutEffect(() => { if (page) applyPageMetadata(page) }, [page])
   useLayoutEffect(() => { previousPathRef.current = path }, [path])
 
   return (
-    <div className={`page-wrapper react-page-wrapper${path === '/' ? ' is-home-route' : ''}${logoTransition}`}>
+    <div className={`page-wrapper react-page-wrapper${routeClass}${logoTransition}`}>
       <Header overlay={page?.hasCover ?? false} />
       <div className="persistent-site-logo"><SiteLogo /></div>
       <Outlet />

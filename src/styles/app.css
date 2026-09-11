@@ -199,12 +199,32 @@ body {
     }
   }
 
-  /* WORKS is a single-screen landing page on desktop. Scale the whole three-card
-     row from viewport height, not just width, so captions, quote and footer remain
-     visible on typical laptop screens. The row itself remains horizontally centred. */
-  .works-route {
-    --works-row-width: min(calc(100% - 100px), 118vh, 1100px);
-    --works-row-gap: clamp(18px, 2vw, 32px);
+  /* WORKS is a true one-viewport desktop screen. The route flexes to consume the
+     space between the fixed header and footer, while the card row derives its width
+     from viewport height. This keeps the footer on the lower edge and lets the photos
+     grow on taller displays without ever introducing a vertical page scroll. */
+  .react-page-wrapper.is-works-route {
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  .react-page-wrapper.is-works-route .works-route {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    --works-row-gap: clamp(18px, 1.8vw, 30px);
+    --works-row-width: min(
+      calc(100% - 100px),
+      calc(200vh - 600px + var(--works-row-gap) + var(--works-row-gap))
+    );
+  }
+
+  .react-page-wrapper.is-works-route .works-route .page-main {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
   }
 
   .works-route .route-logo-spacer {
@@ -245,8 +265,9 @@ body {
     padding-bottom: 0;
   }
 
-  .works-route + .page-footer {
-    margin-top: 20px;
+  .react-page-wrapper.is-works-route > .page-footer {
+    flex: 0 0 auto;
+    margin: 0 0 14px;
   }
 }
 
