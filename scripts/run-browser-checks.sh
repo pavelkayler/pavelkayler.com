@@ -14,4 +14,5 @@ node --experimental-strip-types --test scripts/resource-queue.test.ts scripts/lo
 python3 scripts/cache-smoke.py
 python3 scripts/lazy-loading-smoke.py
 python3 scripts/works-spacing-smoke.py
+python3 scripts/home-logo-smoke.py
 QA_WEBKIT=1 python3 scripts/browser-smoke.py --base "http://127.0.0.1:$PORT"
