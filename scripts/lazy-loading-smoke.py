@@ -140,7 +140,7 @@ async def exercise(browser, name, mobile, output, base=None):
             await page.wait_for_function("""expected => {
               const gallery=document.querySelector('.album-masonry');
               return gallery && Number(gallery.dataset.mountedCount) === expected;
-            }""", count, timeout=10000)
+            }""", arg=count, timeout=10000)
             assert await page.locator('.album-masonry .piece img').count() == count
             result.setdefault('progressive_mount', []).append({'route':route,'initial':initial_count,'total':count})
             if route == 'portraits':
