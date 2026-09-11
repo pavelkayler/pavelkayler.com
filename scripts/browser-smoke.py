@@ -86,6 +86,27 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             assert before and after and abs(after['y']-before['y']) < 3, f'Inner logo moved: {before} -> {after}'
             assert after['width'] < 140, 'Inner logo should be compact'
             await screenshot('works-scrolled')
+        else:
+            logo = await page.locator('.persistent-site-logo').bounding_box()
+            nav = await page.locator('.menu-list').bounding_box()
+            assert logo and 140 <= logo['width'] <= 160, f'Desktop inner logo should be compact: {logo}'
+            assert logo['x'] > width * .75 and logo['y'] < 30, f'Desktop inner logo should sit in the right header cell: {logo}'
+            assert nav and abs((nav['x'] + nav['width']/2) - width/2) < 8, f'Desktop navigation shifted off centre: {nav}'
+
+            await page.set_viewport_size({"width": width, "height": 850})
+            await page.wait_for_timeout(250)
+            await screenshot('works-850')
+            fit = await page.evaluate("""() => ({
+              viewport: innerHeight,
+              scroll: document.documentElement.scrollHeight,
+              captions: [...document.querySelectorAll('.works-route .listing-caption')].map(el => el.getBoundingClientRect().bottom),
+              footer: document.querySelector('.page-footer')?.getBoundingClientRect().bottom ?? 0,
+            })""")
+            assert max(fit['captions']) < fit['viewport'], f'Works captions fall below first screen: {fit}'
+            assert fit['footer'] <= fit['viewport'] + 3, f'Works page should fit one 850px desktop viewport: {fit}'
+            assert fit['scroll'] <= fit['viewport'] + 3, f'Works page still scrolls at 850px desktop height: {fit}'
+            await page.set_viewport_size({"width": width, "height": height})
+            await page.wait_for_timeout(150)
         checks.append('works navigation, inactive menu and fixed inner logo')
 
         stage = 'contacts and history'
