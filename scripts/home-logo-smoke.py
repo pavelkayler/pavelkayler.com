@@ -64,16 +64,19 @@ async def check_viewport(browser, width, height, label, mobile=False):
         assert 'header-logo-fade-in' in logo_classes, f'{label}: HOME -> WORKS did not request the header opacity fade: {logo_classes}'
         animation = await inner_logo.evaluate("el => getComputedStyle(el).animationName")
         assert animation == 'header-logo-opacity-in', f'{label}: wrong header logo animation: {animation}'
-        transform = await inner_logo.evaluate("el => getComputedStyle(el).transform")
-        assert transform == 'none', f'{label}: header logo fade must not move the logo: transform={transform}'
 
+        first_transform = await inner_logo.evaluate("el => getComputedStyle(el).transform")
         first = await inner_logo.bounding_box()
         await page.wait_for_timeout(120)
+        middle_transform = await inner_logo.evaluate("el => getComputedStyle(el).transform")
         middle = await inner_logo.bounding_box()
         await page.wait_for_timeout(450)
+        last_transform = await inner_logo.evaluate("el => getComputedStyle(el).transform")
         second = await inner_logo.bounding_box()
         opacity = float(await inner_logo.evaluate("el => getComputedStyle(el).opacity"))
         assert first and middle and second, f'{label}: missing header-logo geometry during fade'
+        assert first_transform == middle_transform == last_transform, \
+            f'{label}: header logo transform changed during opacity fade: {first_transform} -> {middle_transform} -> {last_transform}'
         for before, after in ((first, middle), (middle, second)):
             assert abs(before['x'] - after['x']) <= .5 and abs(before['y'] - after['y']) <= .5, \
                 f'{label}: header logo moved during opacity fade: {first} -> {middle} -> {second}'
