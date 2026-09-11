@@ -63,14 +63,27 @@ export function prepareStartup(path: string, retry = false): ResourceWork {
   startupIds = result.ids
   return result
 }
-/** Optional, small screen warm-up; never enumerate whole albums/zoom/videos. */
-export function prepareScreen(path: string, priority = 20) {
+
+/** Warm only the small route module. Background warm-up must never decode photographs. */
+export function prepareCode(path: string, priority = 40) {
+  path = normalizeRoute(path)
+  if (!allRoutes.includes(path)) return
+  return work([codeTask(path, priority, false)])
+}
+
+/** First-screen warm-up used only after explicit user intent. */
+export function prepareScreen(path: string, priority = 5) {
   path = normalizeRoute(path)
   if (!allRoutes.includes(path)) return
   return work([...imageWork(screenPlan(path), priority, false), codeTask(path, priority, false)])
 }
-export function prepareNavigation(_path: string, _signal: AbortSignal) { return null }
+
+/** Never block the data-router commit. Promote the demanded route to foreground instead. */
+export function prepareNavigation(path: string, _signal: AbortSignal) {
+  if (getInitialPhase() !== 'loading') prepareScreen(path, 0)
+  return null
+}
 Object.defineProperty(window, '__portfolioLoading', { configurable: true, get: () => ({
-  phase: initialPhase, policy: 'first-screens-lazy', startupIds: [...startupIds],
+  phase: initialPhase, policy: 'intent-first-screens', startupIds: [...startupIds],
   tasks: resources.all().map(({ id, priority, state }) => ({ id, priority, state })),
 }) })
