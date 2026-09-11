@@ -1,0 +1,38 @@
+/* Keep route changes on a single viewport-sized compositor layer. Animating the
+   whole .react-route made long photo albums expensive to rasterize. */
+.react-route {
+  animation: none !important;
+}
+
+.route-transition-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 390;
+  pointer-events: none;
+  contain: strict;
+  background: #1e1e1e;
+  opacity: 0;
+  animation: route-transition-shield-release 140ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes route-transition-shield-release {
+  from { opacity: 0.78; }
+  99% { opacity: 0; }
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* The placeholder is a flat colour; a full-resolution canvas provides no visual
+   benefit and can allocate a very large backing surface. Aspect ratio comes from
+   the inline style generated from the maintained image dimensions. */
+.react-route .lazy-image > .placeholder {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition-shield {
+    animation: none !important;
+    visibility: hidden;
+  }
+}
