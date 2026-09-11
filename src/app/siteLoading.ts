@@ -29,9 +29,9 @@ async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
   } finally { window.clearTimeout(timer) }
 }
 export interface ResourceWork { ids: string[]; finished: Promise<boolean> }
-function imageWork(specs: ImageSpec[], priority: number, retry: boolean) {
+function imageWork(specs: ImageSpec[], priority: number, retry: boolean, decode: boolean) {
   return [...new Set(specs.map(imageUrl))].map(url => ({
-    id: imageTaskId(url), promise: requestImage(url, priority, true, retry),
+    id: imageTaskId(url), promise: requestImage(url, priority, decode, retry),
   }))
 }
 function work(tasks: { id: string; promise: Promise<void> }[]): ResourceWork {
@@ -47,13 +47,13 @@ function codeTask(path: string, priority: number, retry: boolean) {
   return { id, promise: resources.request(id, () => bounded(preloadRouteModule(path), id), priority, { retry }) }
 }
 let startupIds: string[] = []
-/** Only the current route's first screen may block first paint. */
+/** Only the current route's first screen may block first paint, so startup decodes it fully. */
 export function prepareStartup(path: string, retry = false): ResourceWork {
   const route = normalizeRoute(path)
   const routes = allRoutes.includes(route) ? [route] : []
   const fonts = 'fonts:site'
   const result = work([
-    ...imageWork(startupPlan(route), 0, retry), ...routes.map(item => codeTask(item, 0, retry)),
+    ...imageWork(startupPlan(route), 0, retry, true), ...routes.map(item => codeTask(item, 0, retry)),
     { id: fonts, promise: resources.request(fonts, () => bounded(Promise.all([
       document.fonts.load('400 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
       document.fonts.load('700 16px Oswald', 'Home Works Contacts Портреты Проекты Бренды'),
@@ -64,21 +64,25 @@ export function prepareStartup(path: string, retry = false): ResourceWork {
   return result
 }
 
-/** Warm only the small route module. Background warm-up must never decode photographs. */
+/** Warm only the small route module. Background warm-up must never touch photographs. */
 export function prepareCode(path: string, priority = 40) {
   path = normalizeRoute(path)
   if (!allRoutes.includes(path)) return
   return work([codeTask(path, priority, false)])
 }
 
-/** First-screen warm-up used only after explicit user intent. */
+/**
+ * Explicit route intent warms the network/cache, but deliberately does not decode in
+ * a hidden Image. The real rendered <img> owns the single decode after route commit,
+ * avoiding duplicate main-thread/image-decoder work during the transition itself.
+ */
 export function prepareScreen(path: string, priority = 5) {
   path = normalizeRoute(path)
   if (!allRoutes.includes(path)) return
-  return work([...imageWork(screenPlan(path), priority, false), codeTask(path, priority, false)])
+  return work([...imageWork(screenPlan(path), priority, false, false), codeTask(path, priority, false)])
 }
 
-/** Never block the data-router commit. Promote the demanded route to foreground instead. */
+/** Never block the data-router commit. Promote/download the demanded route instead. */
 export function prepareNavigation(path: string, _signal: AbortSignal) {
   if (getInitialPhase() !== 'loading') prepareScreen(path, 0)
   return null
