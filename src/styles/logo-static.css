@@ -1,16 +1,29 @@
-/* Route changes no longer animate one shared logo between two positions.
-   HOME owns its centred hero mark; inner pages own the compact header mark. */
+/* HOME owns its centred hero mark; inner pages own the compact header mark.
+   They never travel between positions. The only route-change animation allowed for
+   the inner mark is an opacity fade when leaving HOME. */
 .react-page-wrapper .persistent-site-logo {
-  animation: none !important;
+  animation: none;
   will-change: auto !important;
 }
 
-/* Keep the existing slogan/subtitle block in its original flex position. The logo is
-   absolutely attached to that block, so only PAVEL KAYLER moves down; the existing
-   LONELINESS… and subtitle coordinates do not move. */
+.react-page-wrapper .persistent-site-logo.header-logo-fade-in {
+  animation: header-logo-opacity-in 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes header-logo-opacity-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* The frozen Wfolio theme gives every cover header 60px of top padding. The former
+   geometry check measured the h1 border box, so the DOM gap was 12px while the
+   visible LONELINESS… text actually sat another 60px lower. Keep the slogan and
+   subtitle exactly where they are and compensate for that padding when positioning
+   PAVEL KAYLER. The two visible text-to-text gaps are therefore both 12px. */
 .react-page-wrapper.is-home-route .home-hero-copy {
   position: relative;
   --home-hero-copy-gap: 12px;
+  --home-cover-header-top-padding: 60px;
   text-align: center;
 }
 
@@ -22,7 +35,7 @@
   position: absolute;
   z-index: 1;
   left: 50%;
-  bottom: calc(100% + var(--home-hero-copy-gap));
+  bottom: calc(100% - var(--home-cover-header-top-padding) + var(--home-hero-copy-gap));
   width: 209px;
   height: 35px;
   transform: translateX(-50%);
