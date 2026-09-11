@@ -26,6 +26,7 @@ const BATCH_ITEMS = 12
 export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
   const galleryRef = useRef<HTMLDivElement>(null)
   const masonryRef = useRef<Masonry | null>(null)
+  const laidOutCountRef = useRef(Math.min(INITIAL_ITEMS, photos.length))
   const [visibleCount, setVisibleCount] = useState(() => Math.min(INITIAL_ITEMS, photos.length))
   const visiblePhotos = photos.slice(0, visibleCount)
 
@@ -36,6 +37,7 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     const gallery = galleryRef.current
     if (!gallery) return
 
+    laidOutCountRef.current = Math.min(INITIAL_ITEMS, photos.length)
     const masonry = new Masonry(gallery, {
       itemSelector: '.piece',
       percentPosition: true,
@@ -50,15 +52,16 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     }
   }, [photos])
 
-  // Append the remainder in idle batches after the route is already paintable.
+  // Give the destination route a generous quiet window before adding below-fold DOM.
+  // Subsequent batches are scheduled only when the main thread becomes idle.
   useEffect(() => {
     if (visibleCount >= photos.length) return
     const idleWindow = window as IdleWindow
     let idleId: number | undefined
-    const delay = visibleCount <= INITIAL_ITEMS ? 320 : 60
+    const delay = visibleCount <= INITIAL_ITEMS ? 600 : 80
     const timer = window.setTimeout(() => {
       const append = () => setVisibleCount(current => Math.min(current + BATCH_ITEMS, photos.length))
-      if (idleWindow.requestIdleCallback) idleId = idleWindow.requestIdleCallback(append, { timeout: 350 })
+      if (idleWindow.requestIdleCallback) idleId = idleWindow.requestIdleCallback(append, { timeout: 450 })
       else append()
     }, delay)
     return () => {
@@ -67,16 +70,17 @@ export function NativeGallery({ photos, prioritizeFirst = true }: Props) {
     }
   }, [visibleCount, photos.length])
 
-  // Masonry already exists by this point. Newly appended nodes are discovered and
-  // positioned outside the critical first frame.
-  useEffect(() => {
-    if (!masonryRef.current || visibleCount <= Math.min(INITIAL_ITEMS, photos.length)) return
-    const frame = window.requestAnimationFrame(() => {
-      masonryRef.current?.reloadItems?.()
-      masonryRef.current?.layout?.()
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [visibleCount, photos.length])
+  // Position only the nodes React just appended. Masonry's appended() preserves the
+  // already-laid-out items, avoiding repeated full-gallery measurement/layout passes.
+  useLayoutEffect(() => {
+    const masonry = masonryRef.current
+    const gallery = galleryRef.current
+    if (!masonry || !gallery || visibleCount <= laidOutCountRef.current) return
+    const pieces = Array.from(gallery.querySelectorAll<HTMLElement>('.piece'))
+    const added = pieces.slice(laidOutCountRef.current, visibleCount)
+    if (added.length) masonry.appended(added)
+    laidOutCountRef.current = visibleCount
+  }, [visibleCount])
 
   useEffect(() => {
     const gallery = galleryRef.current
