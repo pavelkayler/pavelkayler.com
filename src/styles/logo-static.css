@@ -5,15 +5,16 @@
   will-change: auto !important;
 }
 
-/* Keep the existing hero copy exactly where it was. The HOME mark is taken out of
-   normal flow and parked directly above the slogan, so moving the mark does not move
-   LONELINESS… or its subtitle. */
-.react-page-wrapper.is-home-route .cover-content {
+/* Keep the existing slogan/subtitle block in its original flex position. The logo is
+   absolutely attached to that block, so only PAVEL KAYLER moves down; the existing
+   LONELINESS… and subtitle coordinates do not move. */
+.react-page-wrapper.is-home-route .home-hero-copy {
   position: relative;
   --home-hero-copy-gap: 12px;
+  text-align: center;
 }
 
-.react-page-wrapper.is-home-route .cover-content > p {
+.react-page-wrapper.is-home-route .home-hero-copy > p {
   margin-top: var(--home-hero-copy-gap);
 }
 
