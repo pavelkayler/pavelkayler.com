@@ -62,3 +62,50 @@
   max-width: 100% !important;
   max-height: 35px !important;
 }
+
+/* Thin wordmark variant selected from the comparison mockup. Keep the old raster
+   asset resident for preload/geometry compatibility, but paint the visible brand as
+   live Oswald text. Using the regular self-hosted face at reduced horizontal scale
+   and slightly softened opacity gives the narrow, fine-stroke appearance of the
+   approved Thin concept without changing any surrounding layout. */
+.logo-with-placeholder {
+  position: relative;
+  display: inline-block;
+}
+
+.logo-with-placeholder .logo-image {
+  opacity: 0 !important;
+}
+
+.logo-wordmark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: Oswald, sans-serif;
+  font-size: 34px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  transform: scaleX(0.82);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+@media (min-width: 769px) {
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-wordmark {
+    justify-content: flex-end;
+    font-size: 25px;
+    transform-origin: right center;
+  }
+}
+
+@media (max-width: 768px) {
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-wordmark {
+    font-size: 19px;
+  }
+}
