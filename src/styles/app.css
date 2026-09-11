@@ -35,9 +35,9 @@ body {
   cursor: default;
 }
 
-/* The brand mark is now owned by MainLayout, so React Router route changes never
-   unmount or reposition it. 92px is the exact desktop top position produced by
-   the original HOME cover: 32px cover-wrapper margin + 60px cover-header padding. */
+/* The brand mark is owned by MainLayout, so route changes can move the same DOM
+   node instead of blinking between page-local copies. On HOME it remains in the
+   original Wfolio hero position. */
 .persistent-site-logo {
   position: absolute;
   z-index: 450;
@@ -46,6 +46,7 @@ body {
   width: 209px;
   height: 35px;
   transform: translateX(-50%);
+  transform-origin: center center;
   line-height: 0;
   text-align: center;
 }
@@ -134,6 +135,119 @@ body {
 /* Original Polina used JS Masonry; preserve its column sizing with a tiny neutral bridge. */
 .react-route .album-masonry .piece {
   width: 33.333333%;
+}
+
+@media (min-width: 769px) {
+  /* The header already reserves a 160px empty cell on the right to balance the
+     social links on the left. Inner pages now use that cell for the brand mark;
+     the centre navigation therefore does not shift. */
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo {
+    position: fixed;
+    top: 13px;
+    right: 50px;
+    left: auto;
+    width: 150px;
+    height: auto;
+    transform: none;
+    text-align: right;
+  }
+
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo,
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-link,
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-with-placeholder {
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .react-page-wrapper:not(.is-home-route) .persistent-site-logo .logo-image {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: none !important;
+  }
+
+  /* Leaving HOME: the box is already in its final fixed header position, while
+     this transform reproduces the previous centred 209px mark for the first frame.
+     It then glides and shrinks into the right header cell. */
+  .react-page-wrapper.logo-transition-from-home .persistent-site-logo {
+    animation: desktop-logo-home-to-header 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    will-change: transform;
+  }
+
+  /* Going back HOME performs the exact reverse visual move. */
+  .react-page-wrapper.logo-transition-to-home .persistent-site-logo {
+    animation: desktop-logo-header-to-home 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    will-change: transform;
+  }
+
+  @keyframes desktop-logo-home-to-header {
+    from {
+      transform: translate(calc(-50vw + 125px), 84px) scale(1.393333);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes desktop-logo-header-to-home {
+    from {
+      transform: translate(calc(50vw - 229.5px), -84px) scale(0.717703);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* WORKS is a single-screen landing page on desktop. Scale the whole three-card
+     row from viewport height, not just width, so captions, quote and footer remain
+     visible on typical laptop screens. The row itself remains horizontally centred. */
+  .works-route {
+    --works-row-width: min(calc(100% - 100px), 118vh, 1100px);
+    --works-row-gap: clamp(18px, 2vw, 32px);
+  }
+
+  .works-route .route-logo-spacer {
+    display: none;
+  }
+
+  .works-page-title {
+    width: var(--works-row-width);
+    margin-top: 92px;
+  }
+
+  .works-route .sections-container.-full-width .sections-container-inner {
+    width: var(--works-row-width);
+    max-width: none;
+    padding: 16px 0 0;
+  }
+
+  .works-route .listing {
+    display: flex;
+    gap: var(--works-row-gap);
+    margin: 0;
+  }
+
+  .works-route .listing .listing-item {
+    flex: 1 1 0;
+    width: auto;
+    padding: 0;
+  }
+
+  .works-route .listing .listing-caption {
+    padding: 10px 0 0;
+  }
+
+  .works-route .sections-container.-listing-postfix .sections-container-inner {
+    width: min(var(--works-row-width), 820px);
+    max-width: none;
+    padding-top: 16px;
+    padding-bottom: 0;
+  }
+
+  .works-route + .page-footer {
+    margin-top: 20px;
+  }
 }
 
 @media (max-width: 768px) {
