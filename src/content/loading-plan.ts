@@ -18,13 +18,13 @@ export const logoSpec: ImageSpec = { src: siteLogo.src }
 export function screenPlan(path: string): ImageSpec[] {
   path = normalizeRoute(path)
   if (path === '/') return [logoSpec, { ...homeContent.cover.slides[0], sizes: '100vw' }]
-  if (path === '/works') return [logoSpec, ...worksContent.cards.map(card => ({ ...card.image, sizes: MAIN_IMAGE_SIZES }))]
-  if (path === '/contacts') return [logoSpec, { ...contactsContent.image, sizes: MAIN_IMAGE_SIZES }]
+  if (path === '/works') return worksContent.cards.map(card => ({ ...card.image, sizes: MAIN_IMAGE_SIZES }))
+  if (path === '/contacts') return [{ ...contactsContent.image, sizes: MAIN_IMAGE_SIZES }]
   const album = albums[path as keyof typeof albums]
-  if (!album) return [logoSpec]
+  if (!album) return []
   // Prime the first row only. The rendered first-screen check promotes any additional
   // partially visible Masonry images before the startup mask disappears.
-  return [logoSpec, ...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
+  return [...(album.cover?.poster ? [{ src: album.cover.poster }] : []),
     ...album.photos.slice(0, 3).map(photo => ({ ...photo.image, sizes: GALLERY_IMAGE_SIZES }))]
 }
 export function startupPlan(path: string): ImageSpec[] {
