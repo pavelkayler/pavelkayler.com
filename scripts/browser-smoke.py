@@ -41,7 +41,8 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await page.evaluate('document.fonts.ready')
         await page.wait_for_timeout(400)
         assert not await page.evaluate('document.documentElement.scrollWidth > innerWidth + 2'), 'Horizontal page overflow'
-        await page.wait_for_function("document.querySelector('.logo-image')?.naturalWidth > 0")
+        if await page.locator('.home-site-logo').count():
+            await page.wait_for_function("document.querySelector('.home-site-logo .logo-image')?.naturalWidth > 0")
 
     async def swipe_next():
         await page.mouse.move(width*.8, height*.55)
@@ -75,22 +76,18 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         await settled()
         assert await page.locator('.menu-list [aria-current="page"]').inner_text() == 'WORKS'
         assert await page.locator('.menu-list a', has_text='WORKS').count() == 0
+        assert await page.locator('.persistent-site-logo').count() == 0, 'Header wordmark must be removed on inner pages'
+        header_text = (await page.locator('.page-header').inner_text()).upper()
+        assert 'PAVEL KAYLER' not in header_text, f'PAVEL KAYLER still appears in the header: {header_text}'
         await screenshot('works')
         if mobile:
-            before = await page.locator('.js-logo').bounding_box()
             scroller = await page.evaluate_handle(SCROLLER)
             moved = await scroller.evaluate('(el) => { el.scrollTop = 600; return el.scrollTop; }')
             assert moved > 100, 'Scroll test did not actually move the page'
             await page.wait_for_timeout(300)
-            after = await page.locator('.js-logo').bounding_box()
-            assert before and after and abs(after['y']-before['y']) < 3, f'Inner logo moved: {before} -> {after}'
-            assert after['width'] < 140, 'Inner logo should be compact'
             await screenshot('works-scrolled')
         else:
-            logo = await page.locator('.persistent-site-logo').bounding_box()
             nav = await page.locator('.menu-list').bounding_box()
-            assert logo and 140 <= logo['width'] <= 160, f'Desktop inner logo should be compact: {logo}'
-            assert logo['x'] > width * .75 and logo['y'] < 30, f'Desktop inner logo should sit in the right header cell: {logo}'
             assert nav and abs((nav['x'] + nav['width']/2) - width/2) < 8, f'Desktop navigation shifted off centre: {nav}'
 
             await page.set_viewport_size({"width": width, "height": 850})
@@ -114,13 +111,14 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
             assert fit['scroll'] <= fit['viewport'] + 3, f'Works page still scrolls at 850px desktop height: {fit}'
             await page.set_viewport_size({"width": width, "height": height})
             await page.wait_for_timeout(150)
-        checks.append('works navigation, inactive menu and fixed inner logo')
+        checks.append('works navigation, inactive menu and logo-free header')
 
         stage = 'contacts and history'
         await page.locator('.menu-list a', has_text='CONTACTS').click()
         await page.wait_for_url('**/contacts')
         await settled()
         assert await page.locator('.menu-list [aria-current="page"]').inner_text() == 'CONTACTS'
+        assert await page.locator('.persistent-site-logo').count() == 0, 'Header wordmark returned on CONTACTS'
         await screenshot('contacts')
         await page.go_back()
         assert urlparse(page.url).path.rstrip('/') == '/works', page.url
@@ -176,7 +174,7 @@ async def exercise(browser, base, output, name, width, height, mobile=False):
         state = {}
         try:
             await screenshot('failure')
-            state = await page.evaluate("({url:location.href,index:window.pswp?.currIndex,items:window.pswp?.getNumItems(),opening:window.pswp?.opener?.isOpening,open:window.pswp?.opener?.isOpen,images:[...document.querySelectorAll('.pswp__img')].map(i=>({src:i.currentSrc,width:i.naturalWidth}))})")
+            state = await page.evaluate('({url:location.href,index:window.pswp?.currIndex,items:window.pswp?.getNumItems(),opening:window.pswp?.opener?.isOpening,open:window.pswp?.opener?.isOpen,images:[...document.querySelectorAll(\'.pswp__img\')].map(i=>({src:i.currentSrc,width:i.naturalWidth}))})')
         except Exception:
             pass
         return {'name':name,'passed':False,'stage':stage,'checks':checks,'errors':failures+[str(error)],'state':state}
